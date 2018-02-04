@@ -1,3 +1,18 @@
+'''
+Created on Feb 2018 by W. Liu
+Monte Carlo methode to simulate the photoemission based on three-step model:
+photoexcited, transportation and emission
+|----------------------------|
+|                            |
+|                            |
+|                            |    ^y
+|                            |    |
+|----------------------------|    |
+------------------------------>z
+electron distribution: (z,y,vz,vy,v,E) in GaAs
+z direction: exponential distribution for photoexcited electrons
+y direction: Gauss distribution for photoexcited electrons (depend on laser)
+'''
 import random
 import numpy as np
 from scipy import integrate
