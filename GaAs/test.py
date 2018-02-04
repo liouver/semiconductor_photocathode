@@ -1,6 +1,6 @@
 import random
 import numpy as np
-import scipy as sp
+from scipy import integrate
 from scipy.stats import expon
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
@@ -75,15 +75,34 @@ def photon_to_electron(hw):
     return E_e
 
 
-def electron_distribution(hw, Ni, thick):
+def electron_distribution(hw, Ni, thick, types):
     '''photon decay as exponential distribution in GaAs,
     generating electrons with exponential distribution in z direction.
     Given photon energy, photon number and sample thickness.
     Return excited electron position(z,y),direction(vz,vy),velocity and energy
     '''
+    energy = []
+    if types == 1:  # Four bands photoexcited
+        for i in range(Ni):
+            energy.append(photon_to_electron(hw))
+        energy = np.array(energy)
+    if types == 2:  # use density of state
+        DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
+        func1 = interp1d(DOS[:, 0], DOS[:, 1])
+        norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), Eg, hw,
+                                   limit=10000)
+
+        Ei = np.linspace(Eg, hw, int((hw - Eg) / 0.01))
+        for i in range(len(Ei)):
+            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.01 / norm
+            E_num = np.empty(int(num))
+            E_num.fill(Ei[i] - Eg)
+            energy.extend(E_num)
+        np.random.shuffle(energy)
+
     absorb_data = np.genfromtxt('absorp_coeff_GaAs.txt', delimiter=',')
-    func = interp1d(absorb_data[:, 0], absorb_data[:, 1])
-    alpha = func(hw) * 10**-7  # 1/nm,  absorption coefficient
+    func2 = interp1d(absorb_data[:, 0], absorb_data[:, 1])
+    alpha = func2(hw) * 10**-7  # 1/nm,  absorption coefficient
     # photon distribution in GaAs (exp distribution random variables)
     z_exp = expon.rvs(loc=0, scale=1 / alpha, size=Ni)
     # photon distribution in GaAs with thickness less than thick
@@ -97,13 +116,11 @@ def electron_distribution(hw, Ni, thick):
         theta = random.uniform(0, 2 * pi)
         # y_pos = random.uniform(-1 * 10**6, 1 * 10**6)
         y_pos = random.gauss(0, 0.25 * 10**6)
-        energy = photon_to_electron(hw)
-        velocity = np.sqrt(2 * np.abs(energy) / m_T) * c * 10**9  # nm/s
+        velocity = np.sqrt(2 * np.abs(energy[i]) / m_T) * c * 10**9  # nm/s
         vz = velocity * np.cos(theta)
         vy = velocity * np.sin(theta) * np.cos(phi)
-        distribution_2D.append([z_pos[i], y_pos, vz, vy, velocity, energy])
+        distribution_2D.append([z_pos[i], y_pos, vz, vy, velocity, energy[i]])
     distribution_2D = np.array(distribution_2D)  # ([z, y, vz, vy, v, E])
-
     '''
     plt.figure()
     plt.hist(distribution_2D[:, 5], bins=100)
@@ -162,11 +179,10 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             np.random.shuffle(ep_dist)
             ep_dist_norm = (ep_dist / ep).astype(int)
             # if e-p scattering occur when E < ep ?????
-            dist_2D[:, 5] = dist_2D[:, 5] - ep_dist
-            '''
+            # dist_2D[:, 5] = dist_2D[:, 5] - ep_dist
             for i in range(len(dist_2D[:, 5])):
                 if dist_2D[i, 5] > ep:
-                    dist_2D[i, 5] = dist_2D[i, 5] - ep_dist[i]'''
+                    dist_2D[i, 5] = dist_2D[i, 5] - ep_dist[i]
 
             for i in range(len(dist_2D[:, 5])):
                 happen = 0  # 0: scattering not happen, 1: scattering happen
@@ -292,7 +308,7 @@ def plot_QE(data):
 
 
 def main(opt):
-    hw_start = 1.42  # eV
+    hw_start = float('%.2f' % Eg) + 0.01  # eV
     hw_end = 2.48  # eV
     hw_step = 0.01  # eV
     hw_test = 2.0
@@ -304,7 +320,7 @@ def main(opt):
     E_sch = 0  # eV, vacuum level reduction by Schottky effect
     data = []
     if opt == 1:  # for test
-        dist_2D = electron_distribution(hw_test, Ni, thick)
+        dist_2D = electron_distribution(hw_test, Ni, thick, 2)
         print('excited electron ratio: ', len(dist_2D) / Ni)
 
         surface_2D, back_2D, trap_2D, dist_2D = electron_transport(
@@ -315,8 +331,8 @@ def main(opt):
         print('QE (%): ', 100.0 * len(emiss_2D) / Ni)
 
     elif opt == 2:
-        for hw in np.range(hw_start, hw_end, hw_step):
-            dist_2D = electron_distribution(hw, Ni, thick)
+        for hw in np.arange(hw_start, hw_end, hw_step):
+            dist_2D = electron_distribution(hw, Ni, thick, 2)
             print('excited electron ratio: ', len(dist_2D) / Ni)
 
             surface_2D, back_2D, trap_2D, dist_2D = electron_transport(
@@ -326,7 +342,7 @@ def main(opt):
             emiss_2D, surf_trap = electron_emitting(surface_2D, E_A, E_sch)
 
             QE = 100.0 * len(emiss_2D) / Ni
-            print('photon energy (eV): ', hw, 'QE (%): ', QE)
+            print('photon energy (eV): ', hw, ', QE (%): ', QE)
             data.append([hw, QE])
 
         data = np.array(data)
