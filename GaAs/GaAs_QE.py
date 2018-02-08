@@ -298,7 +298,7 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             tempEnergy = dist_2D[:, 5].clip(0.001)
             k_w = np.sqrt(2 * m_T * tempEnergy * ec) / h_  # 1/m, wavevector
             n0 = 10**25  # m**-3, carrier concentration
-            ni = 10**25  # m**-3, impurity concentration
+            ni = 10**6 * N_A  # m**-3, impurity concentration
             a2 = (eps * kB * T) / (4 * pi * n0 * ec**2)  # m**2
             # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
             Rate_ei = (2 * pi * ni * ec**4 * m_T) / (eps**2 * h_**3 * k_w**3) \
