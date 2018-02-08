@@ -23,8 +23,12 @@ import time
 
 start_time = time.time()
 pi = np.pi
+eps = 12.9 * 8.85 * 10**(-12)  # background dielectric constant
+kB = 1.38 * 10**(-23)  # J/K, Boltzmann constant
+ec = 1.6 * 10**(-19)  # C
+h_ = 1.0546 * 10**(-34)  # J*s, Planc constant
 c = 3 * 10**8  # m/s, light speed
-m_e = 0.510999 * 10**6  # eV/c**2, electron mass
+m_e = 9.109 * 10**(-31)  # kg, electron mass
 m_hh = 0.5 * m_e  # effective heavy hole mass
 m_lh = 0.076 * m_e  # effective light hole mass
 m_so = 0.145 * m_e  # effective split-off band mass
@@ -101,17 +105,17 @@ def electron_distribution(hw, Ni, thick, types):
         for i in range(Ni):
             energy.append(photon_to_electron(hw))
         energy = np.array(energy)
-    if types == 2:  # use density of state
+    if types == 2:  # use density of state from reference
         DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
         func1 = interp1d(DOS[:, 0], DOS[:, 1])
-        norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), Eg, hw,
+        E0 = Eg
+        norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
                                    limit=10000)
-
-        Ei = np.linspace(Eg, hw, int((hw - Eg) / 0.01))
+        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))
         for i in range(len(Ei)):
-            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.01 / norm
+            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.001 / norm
             E_num = np.empty(int(num))
-            E_num.fill(Ei[i] - Eg)
+            E_num.fill(Ei[i] - E0)
             energy.extend(E_num)
         np.random.shuffle(energy)
 
@@ -122,7 +126,18 @@ def electron_distribution(hw, Ni, thick, types):
     z_exp = expon.rvs(loc=0, scale=1 / alpha, size=Ni)
     # photon distribution in GaAs with thickness less than thick
     z_pos = [z for z in z_exp if z <= thick]
+    z_pos = np.array(z_pos)
+    Num = len(z_pos)
+    energy = np.resize(energy, Num)
+    phi = np.random.uniform(0, 2 * pi, Num)
+    theta = np.random.uniform(0, 2 * pi, Num)
+    y_pos = np.random.normal(0, 0.25 * 10**6, Num)
+    velocity = np.sqrt(2 * np.abs(energy) * ec / m_T) * 10**9
+    vz = velocity * np.cos(theta)
+    vy = velocity * np.sin(theta) * np.cos(phi)
+    distribution_2D = np.vstack((z_pos, y_pos, vz, vy, velocity, energy)).T
 
+    '''
     distribution_2D = []
     for i in range(len(z_pos)):
         # initial angle between the projection on XY surface and y axis
@@ -131,11 +146,11 @@ def electron_distribution(hw, Ni, thick, types):
         theta = random.uniform(0, 2 * pi)
         # y_pos = random.uniform(-1 * 10**6, 1 * 10**6)
         y_pos = random.gauss(0, 0.25 * 10**6)
-        velocity = np.sqrt(2 * np.abs(energy[i]) / m_T) * c * 10**9  # nm/s
+        velocity = np.sqrt(2 * np.abs(energy[i]) * ec / m_T) * 10**9  # nm/s
         vz = velocity * np.cos(theta)
         vy = velocity * np.sin(theta) * np.cos(phi)
         distribution_2D.append([z_pos[i], y_pos, vz, vy, velocity, energy[i]])
-    distribution_2D = np.array(distribution_2D)  # ([z, y, vz, vy, v, E])
+    distribution_2D = np.array(distribution_2D)  # ([z, y, vz, vy, v, E])'''
     '''
     plt.figure()
     plt.hist(distribution_2D[:, 5], bins=100)
@@ -148,22 +163,25 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
     '''electron transport in the conduction banc (CB) and suffer scattering:
     1. e-phonon (e-p) scattering:
         gain or loss the energy of a phonon (ep) after each scattering
-    1. e-e scattering:
+    2. e-e scattering:
         a. scattering with electrons in CB can be ignored
         b. scattering with electrons in VB when energy bigger than Eg
-    2. e-h scattering:
+    3. e-h scattering:
         main scattering mechanism in p-type GaAs, loss most energy
+    4. e-impurity scattering:
+        non-charged scattering can be ignored
+        charged scattering is considered here
     '''
     surface_2D = []
     trap_2D = []
     back_2D = []
     if types == 1:
+        dist_2D = distribution_2D
         mfp_ep = 3  # nm, mean free path for e-p scattering
         ep = 0.027  # eV, phonon energy in GaAs
         mfp_ee = 10  # nm, mean free path for e-e scattering
-        mfp_eh = 12  # nm, mean free path for e-h scattering
+        mfp_eh = 5  # nm, mean free path for e-h scattering
         mfp = np.min([mfp_ep, mfp_ee, mfp_eh])
-        dist_2D = distribution_2D
         t = 0
         while t < endT:
             # random free path, standard normal distribution
@@ -171,7 +189,7 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             # sigma * np.random.randn() + mu, N(mu, sigma**2)
             free_path = np.abs(mfp / 3) * np.random.randn() + mfp
             # mean velocity for mean energy, nm/s
-            mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) / m_T) * c * 10**9
+            mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
             stept = free_path / mean_v / 5
             # transfer matrix after stept for electron without scattering
             M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
@@ -182,7 +200,7 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             # ----------- scattering change the distribution -----------
             # ----- get the energy distribution after scattering -------
             # e-p scattering probability within stept
-            P_ep = 0.2
+            P_ep = mean_v * stept / mfp_ep
             # loss energy probability for e-p scattering
             P_loss = 0.7
             # electron energy distribution after e-p scattering
@@ -227,7 +245,7 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             # ---- renew the velocity and direction after scattering -----
                 if dist_2D[i, 5] > 0:
                     dist_2D[i, 4] = np.sqrt(
-                        2 * np.abs(dist_2D[i, 5]) / m_T) * c * 10**9
+                        2 * np.abs(dist_2D[i, 5]) * ec / m_T) * 10**9
                     phi = random.uniform(0, 2 * pi)
                     theta = random.uniform(0, 2 * pi)
                     if max(happen, ep_dist_norm[i]) == 1:
@@ -243,6 +261,112 @@ def electron_transport(distribution_2D, endT, surface, thick, types):
             surface_2D.extend(fd.tolist())
 
             t += stept
+
+            if len(dist_2D) == 0:
+                break
+
+        dist_2D = dist_2D.tolist()
+        dist_2D.extend(back_2D)
+        dist_2D.extend(trap_2D)
+        dist_2D.extend(surface_2D)
+        dist_2D = np.array(dist_2D)
+        dist_2D[:, 5] = np.maximum(dist_2D[:, 5], 0)
+        dist_2D[:, 0] = np.clip(dist_2D[:, 0], surface, thick)
+
+    elif types == 2:
+        '''including e-p, e-h and e-impurity scattering '''
+        dist_2D = distribution_2D
+        mfp_ep = 3  # nm, mean free path for e-p scattering
+        ep = 0.027  # eV, phonon energy in GaAs
+        mfp_eh = 5  # nm, mean free path for e-h scattering
+        mfp = np.min([mfp_ep, mfp_eh])
+        t = 0
+        while t < endT:
+            # random free path, standard normal distribution
+            #  2.5 * np.random.randn(2, 4) + 3, N(3, 6.25)
+            # sigma * np.random.randn() + mu, N(mu, sigma**2)
+            free_path = np.abs(mfp / 3) * np.random.randn() + mfp
+            # mean velocity for mean energy, nm/s
+            mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
+            stept = free_path / mean_v / 5
+            t += stept
+            # transfer matrix after stept for electron without scattering
+            M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
+                             [stept, 0, 1, 0, 0, 0], [0, stept, 0, 1, 0, 0],
+                             [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
+            dist_2D = np.dot(dist_2D, M_st)
+
+            # ----------- scattering change the distribution -----------
+            # ----- get the energy distribution after scattering -------
+
+            # --- e-p scattering ---
+            # e-p scattering probability within stept
+            # P_ep = mean_v * stept / mfp_ep
+            P_ep = 0.2
+            # loss energy probability for e-p scattering
+            P_loss = 0.7
+            # electron energy distribution after e-p scattering
+            Num = len(dist_2D)
+            ep_gain = int(Num * P_ep * P_loss)
+            ep_loss = int(Num * P_ep * (1 - P_loss))
+            ep_dist = np.array([ep] * ep_gain + [-ep] * ep_loss +
+                               [0] * (Num - ep_gain - ep_loss))
+            np.random.shuffle(ep_dist)
+            P_ep_ind = (ep_dist / ep).astype(int)
+            # if e-p scattering occur when E < ep ?????
+            # dist_2D[:, 5] = dist_2D[:, 5] - ep_dist
+            energy_ind = dist_2D[:, 5] >= ep
+            # print(Num, len(P_ep_ind), len(energy_ind), len(ep_dist))
+            happen_ep = P_ep_ind * energy_ind
+            dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep
+
+            # ----- e-impurity scattering ---Y. Nishimura, Jnp. J. Appl. Phys.
+            tempEnergy = dist_2D[:, 5].clip(0.001)
+            k_w = np.sqrt(2 * m_T * tempEnergy * ec) / h_  # 1/m, wavevector
+            n0 = 10**25  # m**-3, carrier concentration
+            ni = 10**25  # m**-3, impurity concentration
+            a2 = (eps * kB * T) / (4 * pi * n0 * ec**2)  # m**2
+            # e-impurity scattering rate
+            Rate_ei = (2 * pi * ni * ec**4 * m_T) / (eps**2 * h_**3 * k_w**3) \
+                * (np.log(1 + 4 * a2 * k_w**2) -
+                   (4 * a2 * k_w**2) / (1 + 4 * a2 * k_w**2))
+            P_ei = stept * Rate_ei  # e-impurity scattering probability
+            random_P_ei = np.random.uniform(0, 1, Num)
+            P_ei_ind = random_P_ei <= P_ei
+            energy_ind = dist_2D[:, 5] > 0
+            happen_ie = [1] * Num * P_ei_ind * energy_ind
+            ei_loss = np.random.uniform(0, tempEnergy) * happen_ie
+            dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
+
+            # --- e-h scattering ---
+            P_eh = dist_2D[:, 4] * stept / mfp_eh
+            random_P_eh = np.random.uniform(0, 1, Num)
+            P_eh_ind = random_P_eh <= P_eh
+            energy_ind = dist_2D[:, 5] > 0
+            happen_eh = [1] * Num * P_eh_ind * energy_ind
+            eh_loss = np.random.uniform(0, tempEnergy) * happen_eh
+            dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
+            # print(dist_2D[:, 5], len(dist_2D))
+            happen = happen_ep + happen_ie + happen_eh
+
+            # ---- renew the velocity and direction after scattering -----
+            energy_ind = dist_2D[:, 5] > 0
+            happen = happen * energy_ind
+            phi = np.random.uniform(0, 2 * pi, Num)
+            theta = np.random.uniform(0, 2 * pi, Num)
+            dist_2D[:, 4] = dist_2D[:, 4] * (~energy_ind) + np.sqrt(
+                2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9 * happen
+            dist_2D[:, 2] = dist_2D[:, 4] * np.cos(theta) * happen + \
+                dist_2D[:, 2] * (~energy_ind)
+            dist_2D[:, 3] = dist_2D[:, 4] * np.sin(theta) * np.cos(phi) +\
+                dist_2D[:, 3] * (~energy_ind)
+
+            # ------ filter electrons-------
+            bd, fd, td, dist_2D = filter(dist_2D, surface, thick, 0)
+
+            back_2D.extend(bd.tolist())
+            trap_2D.extend(td.tolist())
+            surface_2D.extend(fd.tolist())
 
             if len(dist_2D) == 0:
                 break
@@ -281,7 +405,7 @@ def filter(dist_2D, surface, thick, threshold_value):
     assert thick > surface
     back = dist_2D[:, 0] >= thick
     front = dist_2D[:, 0] <= surface
-    trap = dist_2D[:, 0] <= threshold_value
+    trap = dist_2D[:, 5] <= threshold_value
 
     back_dist = dist_2D[back, :]
     front_dist = dist_2D[front, :]
@@ -315,7 +439,7 @@ def electron_emitting(surface_2D, E_A, E_sch):
 
 def plot_QE(data):
     fig1, ax1 = plt.subplots()
-    ax1.plt(data[:, 0], data[:, 1])
+    ax1.plot(data[:, 0], data[:, 1])
     ax1.set_xlabel('Photon energy (eV)')
     ax1.set_ylabel('QE (%)')
     plt.savefig('QE.pdf', format='pdf')
@@ -325,13 +449,13 @@ def plot_QE(data):
 def main(opt):
     hw_start = float('%.2f' % Eg) + 0.01  # eV
     hw_end = 2.48  # eV
-    hw_step = 0.01  # eV
-    hw_test = 2.0
+    hw_step = 0.02  # eV
+    hw_test = 2.0  # eV
     Ni = 100000  # incident photon number
     thick = 2000  # nm, thickness of GaAs active layer
     endT = 0.01  # s
     surface = 0  # position of electron emission, z = 0
-    E_A = 0  # eV, electron affinity
+    E_A = -0.1  # eV, electron affinity
     E_sch = 0  # eV, vacuum level reduction by Schottky effect
     data = []
     if opt == 1:  # for test
@@ -339,7 +463,7 @@ def main(opt):
         print('excited electron ratio: ', len(dist_2D) / Ni)
 
         surface_2D, back_2D, trap_2D, dist_2D = electron_transport(
-            dist_2D, endT, surface, thick, 1)
+            dist_2D, endT, surface, thick, 2)
         print('surface electron ratio: ', len(surface_2D) / Ni)
 
         emiss_2D, surf_trap = electron_emitting(surface_2D, E_A, E_sch)
@@ -367,4 +491,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(2)
+    main(1)
