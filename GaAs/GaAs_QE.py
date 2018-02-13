@@ -225,7 +225,7 @@ def carrier_scattering(electron_energy, hole_energy):
     T_h = np.mean(hole_energy) * ec / kB
     # n0 = N_A  # hole number
     # n_e = N_A  # electron number
-    n_h = N_A  # m**-3, hole concentration
+    n_h = 0.1 * N_A  # m**-3, hole concentration
     mu = m_T * m_hh / (m_T + m_hh)
     beta2 = n_h * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
     # print(beta2)
@@ -234,6 +234,7 @@ def carrier_scattering(electron_energy, hole_energy):
     # Rate_ee = []
     # Rate_hh = []
     ke = np.linspace(min(k_e), max(k_e), 100)
+    print(electron_energy, 4 * ke**2 / beta2)
     # kh = np.linspace(min(k_h), 1. * max(k_h), 100)
     for i in range(len(ke)):
         Q_eh = 2 * mu * np.abs(ke[i] / m_T - k_h / m_h)
@@ -404,7 +405,7 @@ def electron_transport(distribution_2D, types):
             fig, ax = plt.subplots()
             ax.loglog(tempEnergy, Rate_ei, 'b.', tempEnergy, Rate_eh, '.')
             plt.show()'''
-
+            '''
             # mean velocity for mean energy, nm/s
             mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
             mfp_ei = mean_v / np.mean(Rate_ei)  # nm, MFP for e-i scattering
@@ -415,7 +416,8 @@ def electron_transport(distribution_2D, types):
             #  2.5 * np.random.randn(2, 4) + 3, N(3, 6.25)
             # sigma * np.random.randn() + mu, N(mu, sigma**2)
             free_path = np.abs(mfp / 3) * np.random.randn() + mfp
-            stept = free_path / mean_v / 5
+            stept = free_path / mean_v / 5'''
+            stept = step_time
             t += stept
             # transfer matrix after stept for electron without scattering
             M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
@@ -428,8 +430,8 @@ def electron_transport(distribution_2D, types):
 
             # --- e-p scattering ---
             # e-p scattering probability within stept
-            # P_ep = mean_v * stept / mfp_ep
-            P_ep = 0.2
+            P_ep = mean_v * stept / mfp_ep
+            # P_ep = 0.2
             # loss energy probability for e-p scattering
             P_loss = 0.7
             # electron energy distribution after e-p scattering
@@ -445,7 +447,7 @@ def electron_transport(distribution_2D, types):
             energy_ep_ind = dist_2D[:, 5] >= ep
             # print(Num, len(P_ep_ind), len(energy_ind), len(ep_dist))
             happen_ep = P_ep_ind
-            # dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
+            dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
 
             # ----- e-impurity scattering ---
             P_ei = stept * Rate_ei  # e-impurity scattering probability
@@ -456,7 +458,7 @@ def electron_transport(distribution_2D, types):
             happen_ie = [1] * Num * P_ei_ind
             ei_loss = np.random.uniform(
                 0, tempEnergy - E_T) * happen_ie * energy_ei_ind
-            # dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
+            dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
 
             # --- e-h scattering ---
             # P_eh = np.abs(dist_2D[:, 4]) * stept / mfp_eh
@@ -590,15 +592,16 @@ def plot_time_data(time_data):
     fig1, ax1 = plt.subplots()
     ax1.plot(time_data[:, 0], time_data[:, 1], 'b')
     ax1.set_xlabel('Time (ps)', fontsize=14)
-    ax1.set_ylabel('Energy (meV)', fontsize=14)
-    ax1.tick_params('both', direction='in', labelsize=12)
+    ax1.set_ylabel('Energy (meV)', fontsize=14, color='b')
     ax1.tick_params('y', color='b')
+    ax1.tick_params('both', direction='in', labelsize=12)
 
     ax2 = ax1.twinx()
     ax2.semilogy(time_data[:, 0], time_data[:, 2], 'r',
                  time_data[:, 0], time_data[:, 3], 'g')
     ax2.set_ylabel('Counts', fontsize=14)
-    ax2.tick_params('y', color='r', direction='in', labelsize=12)
+    ax2.tick_params('y', color='r')
+    ax1.tick_params('both', direction='in', labelsize=12)
     ax2.legend(['Surface', 'Inside'], loc='center', frameon=False, fontsize=12)
     fig1.tight_layout()
     plt.show()
