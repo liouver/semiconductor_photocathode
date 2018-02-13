@@ -42,26 +42,26 @@ m_X = 0.851 * m_e  # X valley effective electron mass
 m_h = (m_hh**1.5 + m_lh**1.5 + m_so**1.5)**(2 / 3)
 # ----Set material parameters----
 T = 298  # K, material temperature
-N_A = 1e19  # cm**(-3), doping concentration
+N_A = 1e25  # m**(-3), doping concentration
 E_T = kB * T / ec
 Eg = 1.519 - 0.54 * 10**(-3) * T**2 / (T + 204)  # eV, bandgap
 # Tiwari, S, Appl. Phys. Lett. 56, 6 (1990) 563-565. (experiment data)
 # Eg = Eg - 2 * 10**(-11) * np.sqrt(N_A)
-DEg = 3 * ec / 16 / pi / eps * np.sqrt(ec**2 * N_A * 10**6 / eps / kB / T)
+DEg = 3 * ec / 16 / pi / eps * np.sqrt(ec**2 * N_A / eps / kB / T)
 Eg = Eg - DEg
 DE = 0.34  # eV, split-off energy gap
 # E_B = Eg / 3  # only for NA = 10**19 cm**-3
 EB_data = np.genfromtxt('GaAs_Band_Bending.csv', delimiter=',')
-func0 = interp1d(EB_data[:, 0], EB_data[:, 1])
+func0 = interp1d(EB_data[:, 0] * 1e6, EB_data[:, 1])
 E_B = func0(N_A)
-W_B = np.sqrt(2 * eps * E_B / ec / N_A / 10**6) * 10**9  # nm
+W_B = np.sqrt(2 * eps * E_B / ec / N_A) * 10**9  # nm
 # print(Eg, E_B, W_B, DEg, E_T)
 E_A = -0.1  # eV, electron affinity
 thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 100e-12  # s
+total_time = 1e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -126,72 +126,6 @@ def photon_to_electron(hw):
     # print(DE_h, E_e)
 
     return E_e
-
-
-def impurity_scattering(energy):
-    energy = energy.clip(0.001)
-    k_e = np.sqrt(2 * m_T * energy * ec) / h_  # 1/m, wavevector
-    n0 = 1e6 * N_A  # m**-3, carrier concentration
-    ni = 1e6 * N_A  # m**-3, impurity concentration
-    a2 = (eps * kB * T) / (4 * pi * n0 * ec**2)  # m**2
-    # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
-    Rate_ei = (2 * pi * ni * ec**4 * m_T) / (eps**2 * h_**3 * k_e**3) \
-        * (np.log(1 + 4 * a2 * k_e**2) -
-           (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
-    return Rate_ei
-
-
-def carrier_scattering(electron_energy, hole_energy):
-    n = len(electron_energy)
-    electron_energy = electron_energy.clip(0.001)
-    k_e = np.sqrt(2 * m_T * electron_energy * ec) / h_  # 1/m, wavevector
-    k_h = np.sqrt(2 * m_h * hole_energy * ec) / h_
-    T_e = np.mean(electron_energy) * ec / kB
-    T_h = np.mean(hole_energy) * ec / kB
-    n0 = 1e6 * N_A  # hole number
-    # n_e = 1e6 * N_A
-    n_h = 1e6 * N_A  # m**-3, hole concentration
-    mu = m_T * m_hh / (m_T + m_hh)
-    beta2 = n * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
-    Rate_eh = []
-    # Rate_he = []
-    # Rate_ee = []
-    # Rate_hh = []
-    ke = np.linspace(min(k_e), 1. * max(k_e), 100)
-    # kh = np.linspace(min(k_h), 1. * max(k_h), 100)
-    for i in range(len(ke)):
-        Q_eh = 2 * mu * np.abs(ke[i] / m_T - k_h / m_h)
-        # Q_he = 2 * mu * np.abs(kh[i] / m_h - k_e / m_T)
-        Rate1 = n_h * mu * ec**4 / two_pi / eps**2 / h_**3 / n0 * \
-            sum(Q_eh / beta2 / (Q_eh**2 + beta2))
-        '''Rate2 = n_e * mu * ec**4 / two_pi / eps**2 / h_**3 / n0 * \
-            sum(Q_he / beta2 / (Q_he**2 + beta2))
-        Rate3 = n_e * m_T * ec**4 / 4 / pi / eps**2 / h_**3 / n0 * \
-            sum(np.abs(ke[i] - k_e) / beta2 / ((ke[i] - k_e)**2 + beta2))
-        Rate4 = n_h * m_h * ec**4 / 4 / pi / eps**2 / h_**3 / n0 * \
-            sum(np.abs(kh[i] - k_h) / beta2 / ((kh[i] - k_h)**2 + beta2))'''
-        Rate_eh.append(Rate1)
-        # Rate_he.append(Rate2)
-        # Rate_ee.append(Rate3)
-        # Rate_hh.append(Rate4)
-    Rate_eh = np.array(Rate_eh)
-    # Rate_he = np.array(Rate_he)
-    # Rate_ee = np.array(Rate_ee)
-    # Rate_hh = np.array(Rate_hh)
-    func_eh = interp1d(ke, Rate_eh)
-    Rate_eh = func_eh(k_e)
-    '''
-    fig, ax = plt.subplots()
-    ax.semilogy(electron_energy, Rate_eh, '.')
-    ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
-    ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
-    plt.tight_layout()
-    plt.show()'''
-    return Rate_eh
-
-
-def phonon_scattering(electron_energy, hole_energy):
-    A = np.sqrt(2 * m_T) * ec**2 * h_ * ep / 16 / pi / eps / h_**2
 
 
 def electron_distribution(hw, types):
@@ -269,6 +203,73 @@ def electron_distribution(hw, types):
     return distribution_2D
 
 
+def impurity_scattering(energy):
+    energy = energy.clip(0.001)
+    k_e = np.sqrt(2 * m_T * energy * ec) / h_  # 1/m, wavevector
+    n0 = N_A  # m**-3, carrier concentration
+    ni = N_A  # m**-3, impurity concentration
+    a2 = (eps * kB * T) / (4 * pi * n0 * ec**2)  # m**2
+    # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
+    Rate_ei = (2 * pi * ni * ec**4 * m_T) / (eps**2 * h_**3 * k_e**3) \
+        * (np.log(1 + 4 * a2 * k_e**2) -
+           (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
+    return Rate_ei
+
+
+def carrier_scattering(electron_energy, hole_energy):
+    n = len(electron_energy)
+    # electron_energy = electron_energy.clip(0.001)
+    k_e = np.sqrt(2 * m_T * electron_energy * ec) / h_  # 1/m, wavevector
+    k_h = np.sqrt(2 * m_h * hole_energy * ec) / h_
+    T_e = np.mean(electron_energy) * ec / kB
+    T_h = np.mean(hole_energy) * ec / kB
+    # n0 = N_A  # hole number
+    # n_e = N_A  # electron number
+    n_h = N_A  # m**-3, hole concentration
+    mu = m_T * m_hh / (m_T + m_hh)
+    beta2 = n_h * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
+    # print(beta2)
+    Rate_eh = []
+    # Rate_he = []
+    # Rate_ee = []
+    # Rate_hh = []
+    ke = np.linspace(min(k_e), max(k_e), 100)
+    # kh = np.linspace(min(k_h), 1. * max(k_h), 100)
+    for i in range(len(ke)):
+        Q_eh = 2 * mu * np.abs(ke[i] / m_T - k_h / m_h)
+        # Q_he = 2 * mu * np.abs(kh[i] / m_h - k_e / m_T)
+        Rate1 = n_h * mu * ec**4 / two_pi / eps**2 / h_**3 / n * \
+            sum(Q_eh / beta2 / (Q_eh**2 + beta2))
+        '''Rate2 = n_e * mu * ec**4 / two_pi / eps**2 / h_**3 / n * \
+            sum(Q_he / beta2 / (Q_he**2 + beta2))
+        Rate3 = n_e * m_T * ec**4 / 4 / pi / eps**2 / h_**3 / n * \
+            sum(np.abs(ke[i] - k_e) / beta2 / ((ke[i] - k_e)**2 + beta2))
+        Rate4 = n_h * m_h * ec**4 / 4 / pi / eps**2 / h_**3 / n * \
+            sum(np.abs(kh[i] - k_h) / beta2 / ((kh[i] - k_h)**2 + beta2))'''
+        Rate_eh.append(Rate1)
+        # Rate_he.append(Rate2)
+        # Rate_ee.append(Rate3)
+        # Rate_hh.append(Rate4)
+    Rate_eh = np.array(Rate_eh)
+    # Rate_he = np.array(Rate_he)
+    # Rate_ee = np.array(Rate_ee)
+    # Rate_hh = np.array(Rate_hh)
+    func_eh = interp1d(ke, Rate_eh)
+    Rate_eh = func_eh(k_e)
+    '''
+    fig, ax = plt.subplots()
+    ax.semilogy(ke, Rate_eh, '.', kh, Rate_he, '.', ke, Rate_ee, '.')
+    ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
+    ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
+    plt.tight_layout()
+    plt.show()'''
+    return Rate_eh
+
+
+def phonon_scattering(electron_energy, hole_energy):
+    A = np.sqrt(2 * m_T) * ec**2 * h_ * ep / 16 / pi / eps / h_**2
+
+
 def electron_transport(distribution_2D, types):
     '''electron transport in the conduction banc (CB) and suffer scattering:
     1. e-phonon (e-p) scattering:
@@ -288,7 +289,7 @@ def electron_transport(distribution_2D, types):
     time_data = []
     if types == 1:
         dist_2D = distribution_2D
-        mfp_ep = 3  # nm, mean free path for e-p scattering
+        mfp_ep = 30  # nm, mean free path for e-p scattering
         mfp_ee = 10  # nm, mean free path for e-e scattering
         mfp_eh = 20  # nm, mean free path for e-h scattering
         mfp = np.min([mfp_ep, mfp_ee, mfp_eh])
@@ -300,7 +301,8 @@ def electron_transport(distribution_2D, types):
             free_path = np.abs(mfp / 3) * np.random.randn() + mfp
             # mean velocity for mean energy, nm/s
             mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
-            stept = free_path / mean_v / 5
+            # stept = free_path / mean_v / 5
+            stept = step_time
             # transfer matrix after stept for electron without scattering
             M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
                              [stept, 0, 1, 0, 0, 0], [0, stept, 0, 1, 0, 0],
@@ -443,7 +445,7 @@ def electron_transport(distribution_2D, types):
             energy_ep_ind = dist_2D[:, 5] >= ep
             # print(Num, len(P_ep_ind), len(energy_ind), len(ep_dist))
             happen_ep = P_ep_ind
-            dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
+            # dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
 
             # ----- e-impurity scattering ---
             P_ei = stept * Rate_ei  # e-impurity scattering probability
@@ -454,7 +456,7 @@ def electron_transport(distribution_2D, types):
             happen_ie = [1] * Num * P_ei_ind
             ei_loss = np.random.uniform(
                 0, tempEnergy - E_T) * happen_ie * energy_ei_ind
-            dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
+            # dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
 
             # --- e-h scattering ---
             # P_eh = np.abs(dist_2D[:, 4]) * stept / mfp_eh
@@ -463,12 +465,14 @@ def electron_transport(distribution_2D, types):
             P_eh_ind = random_P_eh <= P_eh
             energy_eh_ind = dist_2D[:, 5] >= 0
             happen_eh = [1] * Num * P_eh_ind
-            eh_loss = np.random.uniform(
-                0, tempEnergy - E_T) * happen_eh * energy_eh_ind
+            min_h = np.mean(hole_energy)
+            eh_loss = np.random.uniform(-min_h, tempEnergy - min_h) * \
+                happen_eh * energy_eh_ind
             dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
-            # hole_energy = hole_energy + eh_loss
+            hole_energy = hole_energy + np.mean(eh_loss)
+            hole_energy = np.abs(hole_energy)
             # print(dist_2D[:, 5], len(dist_2D))
-            print(max(hole_energy))
+            # print(np.mean(hole_energy), np.mean(dist_2D[:, 5]))
 
             happen = happen_ep + happen_ie + happen_eh
 
@@ -657,14 +661,14 @@ def main(opt):
         plot_QE(filename, data)
     else:
         print('Wrong run option')
-        # e_energy = maxwell.rvs(0, 0.25, Ni)
-        # hole_energy = maxwell.rvs(0, 0.085, Ni)
-        e_energy = np.linspace(0, 1.5, Ni)
-        hole_energy = np.linspace(0, 0.1, Ni)
+        e_energy = maxwell.rvs(0, 0.25, Ni)
+        hole_energy = maxwell.rvs(0, 0.085, Ni)
+        # e_energy = np.linspace(0, 1, Ni)
+        # hole_energy = np.linspace(0, 0.1, Ni)
         carrier_scattering(e_energy, hole_energy)
 
     print('run time:', time.time() - start_time, 's')
 
 
 if __name__ == '__main__':
-    main(1)
+    main(0)
