@@ -40,9 +40,11 @@ m_T = 0.063 * m_e  # Gamma valley effective electron mass
 m_L = 0.555 * m_e  # L valley effective electron mass
 m_X = 0.851 * m_e  # X valley effective electron mass
 m_h = (m_hh**1.5 + m_lh**1.5 + m_so**1.5)**(2 / 3)
+
 # ----Set material parameters----
 T = 298  # K, material temperature
 N_A = 1e25  # m**(-3), doping concentration
+rou = 5.32e3  # kg/m**3, density of GaAs
 E_T = kB * T / ec
 Eg = 1.519 - 0.54 * 10**(-3) * T**2 / (T + 204)  # eV, bandgap
 # Tiwari, S, Appl. Phys. Lett. 56, 6 (1990) 563-565. (experiment data)
@@ -61,7 +63,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 10e-12  # s
+total_time = 100e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -71,7 +73,14 @@ field_z = 1e3  # V/m
 E_sch = 0  # eV, vacuum level reduction by Schottky effect
 
 # ----Set parameters for phonon scattering----
-ep = 0.036  # eV, phonon energy in GaAs
+ep = 0.036  # eV, optical phonon energy in GaAs
+V_G = 7.01  # eV, acoustic deformation potential for Gamma valley
+V_L = 9.2  # eV,  for L valley
+V_X = 9.0  # eV, for X valley
+ul = 5.24e3  # m/s, longitudial sound speed
+alpha_T = 0.61  # 1/eV, nonparabolicity factor for Gamma valley
+alpha_L = 0.461  # 1/eV, for L valley
+alpha_X = 0.204  # 1/eV, for X valley
 
 
 def photon_to_electron(hw):
@@ -80,7 +89,7 @@ def photon_to_electron(hw):
     split-off band would be excited, and can only excited into Gamma valley.
     Given photon energy, return excited electron energy. '''
     # nonparabolicity factor, 1/eV
-    alpha_T = 0.58 + (T - 77) * (0.61 - 0.58) / (300 - 77)
+    # alpha_T = 0.58 + (T - 77) * (0.61 - 0.58) / (300 - 77)
     Ei = random.uniform(Eg, hw - 0.01)
     if Ei >= Eg + DE:
         x = random.randint(1, 6)
@@ -227,13 +236,6 @@ def electron_hole_scattering(energy):
     Rate_eh = n_h * ec**4 / 16 / 2**0.5 / pi / eps**2 / m_T**0.5 / \
         energy**1.5 / ec**1.5 * (np.log(1 + b) - b / (1 + b))
     # print(b)
-    '''
-    fig, ax = plt.subplots()
-    ax.semilogy(energy, Rate_eh, '.')
-    ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
-    ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
-    plt.tight_layout()
-    plt.show()'''
     return Rate_eh
 
 
@@ -289,8 +291,11 @@ def carrier_scattering(electron_energy, hole_energy):
     return Rate_eh
 
 
-def phonon_scattering(electron_energy, hole_energy):
-    A = np.sqrt(2 * m_T) * ec**2 * h_ * ep / 16 / pi / eps / h_**2
+def acoustic_scattering(energy):
+    Rate_ac = 2**0.5 * m_T**1.5 * kB * T * V_G**2 * energy**0.5 * ec**2.5 /\
+        pi / h_**4 / ul**2 / rou * (1 + 2 * alpha_T * energy**0.5) *\
+        (1 + alpha_T * energy)**0.5
+    return Rate_ac
 
 
 def electron_transport(distribution_2D, types):
@@ -324,8 +329,8 @@ def electron_transport(distribution_2D, types):
             free_path = np.abs(mfp / 3) * np.random.randn() + mfp
             # mean velocity for mean energy, nm/s
             mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
-            # stept = free_path / mean_v / 5
-            stept = step_time
+            stept = free_path / mean_v / 5
+            # stept = step_time
             # transfer matrix after stept for electron without scattering
             M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
                              [stept, 0, 1, 0, 0, 0], [0, stept, 0, 1, 0, 0],
@@ -409,37 +414,31 @@ def electron_transport(distribution_2D, types):
         dist_2D[:, 0] = np.clip(dist_2D[:, 0], surface, thick)
 
     elif types == 2:
-        '''including e-p, e-h and e-impurity scattering '''
+        '''including e-ph, e-h and e-impurity scattering '''
         dist_2D = distribution_2D
-        mfp_ep = 30  # nm, mean free path for e-p scattering
-        # mfp_eh = 20  # nm, mean free path for e-h scattering
         t = 0
-        hole_energy = maxwell.rvs(0, 0.085, len(dist_2D))
+        # assuming holes are steady state of maxwell-boltzmann distribution
+        hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), len(dist_2D))
+        hole_energy = m_h * hole_velocity**2 / 2 / ec
         time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3, 0,
                           len(dist_2D)])
         while t < total_time:
             tempEnergy = dist_2D[:, 5].clip(0.001)
+            Num = len(dist_2D)
             # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
             Rate_ei = impurity_scattering(dist_2D[:, 5])
             # e-h scattering rate
             Rate_eh = electron_hole_scattering(dist_2D[:, 5])
-            '''
-            fig, ax = plt.subplots()
-            ax.loglog(tempEnergy, Rate_ei, 'b.', tempEnergy, Rate_eh, '.')
-            plt.show()'''
-            # mean velocity for mean energy, nm/s
-            mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
-            '''
-            mfp_ei = mean_v / np.mean(Rate_ei)  # nm, MFP for e-i scattering
-            mfp_eh = mean_v / np.mean(Rate_eh)
-            # print(mfp_ei, np.mean(Rate_ei))
-            mfp = np.min([mfp_ep, mfp_eh, mfp_ei])
+            # acounstic phonon scattering rate
+            Rate_ac = acoustic_scattering(dist_2D[:, 5])
+
+            Rate = np.max([np.mean(Rate_ei), np.mean(Rate_eh),
+                           np.mean(Rate_ac)])
             # random free path, standard normal distribution
             #  2.5 * np.random.randn(2, 4) + 3, N(3, 6.25)
             # sigma * np.random.randn() + mu, N(mu, sigma**2)
-            free_path = np.abs(mfp / 3) * np.random.randn() + mfp
-            stept = free_path / mean_v / 5'''
-            stept = step_time
+            Rate = np.abs(Rate / 3) * np.random.randn() + Rate
+            stept = 1 / 2 / Rate
             t += stept
             # transfer matrix after stept for electron without scattering
             M_st = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
@@ -450,26 +449,17 @@ def electron_transport(distribution_2D, types):
             # ----------- scattering change the distribution -----------
             # ----- get the energy distribution after scattering -------
 
-            # --- e-p scattering ---
-            # e-p scattering probability within stept
-            P_ep = mean_v * stept / mfp_ep
-            # P_ep = 0.2
-            # loss energy probability for e-p scattering
-            P_loss = 1
-            # electron energy distribution after e-p scattering
-            Num = len(dist_2D)
-            ep_gain = int(Num * P_ep * P_loss)
-            ep_loss = int(Num * P_ep * (1 - P_loss))
-            ep_dist = np.array([ep] * ep_gain + [-ep] * ep_loss +
-                               [0] * (Num - ep_gain - ep_loss))
-            np.random.shuffle(ep_dist)
-            P_ep_ind = (ep_dist / ep).astype(int)
-            # if e-p scattering occur when E < ep ?????
-            # dist_2D[:, 5] = dist_2D[:, 5] - ep_dist
-            energy_ep_ind = dist_2D[:, 5] >= 0
-            # print(Num, len(P_ep_ind), len(energy_ind), len(ep_dist))
-            happen_ep = P_ep_ind
-            dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
+            # ----- e-phonon scattering -----
+            # -------- 1. acoustic phonon scattering -------
+            # acoustic phonon scattering probability within stept
+            P_ac = stept * Rate_ac
+            # energy transfer
+            ac_energy = 2 * m_T * dist_2D[:, 4] * ul *\
+                np.cos(np.random.uniform(0, two_pi, Num))
+            # scatterred electron index
+            P_ac_ind = np.random.uniform(0, 1, Num) <= P_ac
+            happen_ac = P_ac_ind.astype(int)
+            dist_2D[:, 5] = dist_2D[:, 5] - ac_energy * happen_ac
 
             # ----- e-impurity scattering ---
             P_ei = stept * Rate_ei  # e-impurity scattering probability
@@ -477,18 +467,17 @@ def electron_transport(distribution_2D, types):
             random_P_ei = np.random.uniform(0, 1, Num)
             P_ei_ind = random_P_ei <= P_ei
             energy_ei_ind = dist_2D[:, 5] >= 0
-            happen_ie = [1] * Num * P_ei_ind
+            happen_ie = P_ei_ind.astype(int)
             ei_loss = np.random.uniform(
                 0, tempEnergy - E_T) * happen_ie * energy_ei_ind
             dist_2D[:, 5] = dist_2D[:, 5] - ei_loss
 
-            # --- e-h scattering ---
-            # P_eh = np.abs(dist_2D[:, 4]) * stept / mfp_eh
+            # ----- e-h scattering -----
             P_eh = stept * Rate_eh
             random_P_eh = np.random.uniform(0, 1, Num)
             P_eh_ind = random_P_eh <= P_eh
             energy_eh_ind = dist_2D[:, 5] >= 0
-            happen_eh = [1] * Num * P_eh_ind
+            happen_eh = P_eh_ind.astype(int)
             min_h = np.mean(hole_energy)
             eh_loss = np.random.uniform(-min_h, tempEnergy - min_h) * \
                 happen_eh * energy_eh_ind
@@ -496,9 +485,9 @@ def electron_transport(distribution_2D, types):
             hole_energy = hole_energy + np.mean(eh_loss)
             hole_energy = np.abs(hole_energy)
             # print(dist_2D[:, 5], len(dist_2D))
-            # print(np.mean(hole_energy), np.mean(dist_2D[:, 5]))
+            print(np.mean(hole_energy), np.mean(dist_2D[:, 5]))
 
-            happen = happen_ep + happen_ie + happen_eh
+            happen = happen_ac + happen_ie + happen_eh
 
             # ---- renew the velocity and direction after scattering -----
             energy_ind = dist_2D[:, 5] > 0
@@ -687,19 +676,21 @@ def main(opt):
     else:
         print('Wrong run option')
         # e_energy = maxwell.rvs(0, 0.25, Ni)
-        # hole_energy = maxwell.rvs(0, 0.085, Ni)
+        # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Ni)
+        # hole_energy = m_h * hole_velocity**2 / 2 / ec
         e_energy = np.linspace(0, 1, Ni)
         # hole_energy = np.linspace(0, 0.1, Ni)
         # carrier_scattering(e_energy, hole_energy)
         Rate_eh = electron_hole_scattering(e_energy)
         Rate_ei = impurity_scattering(e_energy)
-
+        Rate_ac = acoustic_scattering(e_energy)
         fig, ax = plt.subplots()
-        ax.semilogy(e_energy, Rate_eh, '.', e_energy, Rate_ei, '.')
+        ax.semilogy(e_energy, Rate_eh, '.', e_energy, Rate_ei, '.',
+                    e_energy, Rate_ac, '.')
         ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
         ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
         plt.tight_layout()
-        plt.show()
+        # plt.show()
 
     print('run time:', time.time() - start_time, 's')
 
