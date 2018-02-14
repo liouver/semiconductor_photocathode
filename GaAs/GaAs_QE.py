@@ -61,7 +61,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 1e-12  # s
+total_time = 10e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -206,17 +206,39 @@ def electron_distribution(hw, types):
 def impurity_scattering(energy):
     energy = energy.clip(0.001)
     k_e = np.sqrt(2 * m_T * energy * ec) / h_  # 1/m, wavevector
-    n0 = N_A  # m**-3, carrier concentration
-    ni = N_A  # m**-3, impurity concentration
-    a2 = (eps * kB * T) / (4 * pi * n0 * ec**2)  # m**2
+    n_i = N_A  # m**-3, impurity concentration
+    # T_e = np.mean(energy) * ec / kB
+    a2 = (eps * kB * T) / (n_i * ec**2)  # m**2
+    # print(4 * a2 * k_e**2)
     # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
-    Rate_ei = (2 * pi * ni * ec**4 * m_T) / (eps**2 * h_**3 * k_e**3) \
+    Rate_ei = (n_i * ec**4 * m_T) / (8 * pi * eps**2 * h_**3 * k_e**3) \
         * (np.log(1 + 4 * a2 * k_e**2) -
            (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
     return Rate_ei
 
 
+def electron_hole_scattering(energy):
+    energy = energy.clip(0.001)
+    n_h = 0.5 * N_A  # m**-3, hole concentration
+    T_h = 298  # K, hole temperature
+    T_e = np.mean(energy) * ec / kB  # K, electron temperature
+    beta2 = n_h * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
+    b = 8 * m_T * energy * ec / h_**2 / beta2
+    Rate_eh = n_h * ec**4 / 16 / 2**0.5 / pi / eps**2 / m_T**0.5 / \
+        energy**1.5 / ec**1.5 * (np.log(1 + b) - b / (1 + b))
+    # print(b)
+    '''
+    fig, ax = plt.subplots()
+    ax.semilogy(energy, Rate_eh, '.')
+    ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
+    ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
+    plt.tight_layout()
+    plt.show()'''
+    return Rate_eh
+
+
 def carrier_scattering(electron_energy, hole_energy):
+    ''' PRB 36, 6018 (2017) '''
     n = len(electron_energy)
     # electron_energy = electron_energy.clip(0.001)
     k_e = np.sqrt(2 * m_T * electron_energy * ec) / h_  # 1/m, wavevector
@@ -234,7 +256,7 @@ def carrier_scattering(electron_energy, hole_energy):
     # Rate_ee = []
     # Rate_hh = []
     ke = np.linspace(min(k_e), max(k_e), 100)
-    print(electron_energy, 4 * ke**2 / beta2)
+    # print(electron_energy, 4 * ke**2 / beta2)
     # kh = np.linspace(min(k_h), 1. * max(k_h), 100)
     for i in range(len(ke)):
         Q_eh = 2 * mu * np.abs(ke[i] / m_T - k_h / m_h)
@@ -389,7 +411,7 @@ def electron_transport(distribution_2D, types):
     elif types == 2:
         '''including e-p, e-h and e-impurity scattering '''
         dist_2D = distribution_2D
-        mfp_ep = 3  # nm, mean free path for e-p scattering
+        mfp_ep = 30  # nm, mean free path for e-p scattering
         # mfp_eh = 20  # nm, mean free path for e-h scattering
         t = 0
         hole_energy = maxwell.rvs(0, 0.085, len(dist_2D))
@@ -400,14 +422,14 @@ def electron_transport(distribution_2D, types):
             # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
             Rate_ei = impurity_scattering(dist_2D[:, 5])
             # e-h scattering rate
-            Rate_eh = carrier_scattering(dist_2D[:, 5], hole_energy)
+            Rate_eh = electron_hole_scattering(dist_2D[:, 5])
             '''
             fig, ax = plt.subplots()
             ax.loglog(tempEnergy, Rate_ei, 'b.', tempEnergy, Rate_eh, '.')
             plt.show()'''
-            '''
             # mean velocity for mean energy, nm/s
             mean_v = np.sqrt(2 * np.mean(dist_2D[:, 5]) * ec / m_T) * 10**9
+            '''
             mfp_ei = mean_v / np.mean(Rate_ei)  # nm, MFP for e-i scattering
             mfp_eh = mean_v / np.mean(Rate_eh)
             # print(mfp_ei, np.mean(Rate_ei))
@@ -433,7 +455,7 @@ def electron_transport(distribution_2D, types):
             P_ep = mean_v * stept / mfp_ep
             # P_ep = 0.2
             # loss energy probability for e-p scattering
-            P_loss = 0.7
+            P_loss = 1
             # electron energy distribution after e-p scattering
             Num = len(dist_2D)
             ep_gain = int(Num * P_ep * P_loss)
@@ -444,7 +466,7 @@ def electron_transport(distribution_2D, types):
             P_ep_ind = (ep_dist / ep).astype(int)
             # if e-p scattering occur when E < ep ?????
             # dist_2D[:, 5] = dist_2D[:, 5] - ep_dist
-            energy_ep_ind = dist_2D[:, 5] >= ep
+            energy_ep_ind = dist_2D[:, 5] >= 0
             # print(Num, len(P_ep_ind), len(energy_ind), len(ep_dist))
             happen_ep = P_ep_ind
             dist_2D[:, 5] = dist_2D[:, 5] - ep * happen_ep * energy_ep_ind
@@ -454,7 +476,7 @@ def electron_transport(distribution_2D, types):
             # print(tempEnergy[0], P_ei[0])
             random_P_ei = np.random.uniform(0, 1, Num)
             P_ei_ind = random_P_ei <= P_ei
-            energy_ei_ind = dist_2D[:, 5] >= E_T
+            energy_ei_ind = dist_2D[:, 5] >= 0
             happen_ie = [1] * Num * P_ei_ind
             ei_loss = np.random.uniform(
                 0, tempEnergy - E_T) * happen_ie * energy_ei_ind
@@ -664,14 +686,23 @@ def main(opt):
         plot_QE(filename, data)
     else:
         print('Wrong run option')
-        e_energy = maxwell.rvs(0, 0.25, Ni)
-        hole_energy = maxwell.rvs(0, 0.085, Ni)
-        # e_energy = np.linspace(0, 1, Ni)
+        # e_energy = maxwell.rvs(0, 0.25, Ni)
+        # hole_energy = maxwell.rvs(0, 0.085, Ni)
+        e_energy = np.linspace(0, 1, Ni)
         # hole_energy = np.linspace(0, 0.1, Ni)
-        carrier_scattering(e_energy, hole_energy)
+        # carrier_scattering(e_energy, hole_energy)
+        Rate_eh = electron_hole_scattering(e_energy)
+        Rate_ei = impurity_scattering(e_energy)
+
+        fig, ax = plt.subplots()
+        ax.semilogy(e_energy, Rate_eh, '.', e_energy, Rate_ei, '.')
+        ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
+        ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
+        plt.tight_layout()
+        plt.show()
 
     print('run time:', time.time() - start_time, 's')
 
 
 if __name__ == '__main__':
-    main(0)
+    main(1)
