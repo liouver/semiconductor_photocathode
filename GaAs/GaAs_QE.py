@@ -63,7 +63,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 100e-12  # s
+total_time = 10e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -298,6 +298,11 @@ def acoustic_scattering(energy):
     return Rate_ac
 
 
+def optical_phonon_scattering(energy):
+    Rate_op =1
+    return Rate_op
+
+
 def electron_transport(distribution_2D, types):
     '''electron transport in the conduction banc (CB) and suffer scattering:
     1. e-phonon (e-p) scattering:
@@ -485,7 +490,7 @@ def electron_transport(distribution_2D, types):
             hole_energy = hole_energy + np.mean(eh_loss)
             hole_energy = np.abs(hole_energy)
             # print(dist_2D[:, 5], len(dist_2D))
-            print(np.mean(hole_energy), np.mean(dist_2D[:, 5]))
+            # print(np.mean(hole_energy), np.mean(dist_2D[:, 5]))
 
             happen = happen_ac + happen_ie + happen_eh
 
@@ -685,15 +690,15 @@ def main(opt):
         Rate_ei = impurity_scattering(e_energy)
         Rate_ac = acoustic_scattering(e_energy)
         fig, ax = plt.subplots()
-        ax.semilogy(e_energy, Rate_eh, '.', e_energy, Rate_ei, '.',
+        ax.loglog(e_energy, Rate_eh, '.', e_energy, Rate_ei, '.',
                     e_energy, Rate_ac, '.')
         ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
         ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
         plt.tight_layout()
-        # plt.show()
+        plt.show()
 
     print('run time:', time.time() - start_time, 's')
 
 
 if __name__ == '__main__':
-    main(1)
+    main(0)
