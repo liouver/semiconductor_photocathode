@@ -551,14 +551,16 @@ def electron_impurity_transfer_energy(dist_2D, Rate, stept):
 
 def electron_hole_transfer_energy(dist_2D, hole_energy, Rate, stept):
     Num = len(dist_2D)
+    hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Num)
+    hole_energy1 = m_h * hole_velocity**2 / 2 / ec
     P_eh = stept * Rate
     random_P_eh = np.random.uniform(0, 1, Num)
     P_eh_ind = random_P_eh <= P_eh
     energy_eh_ind = dist_2D[:, 5] > 0
     happen = P_eh_ind.astype(int)
     # print(np.mean(happen))
-    E_h = np.mean(hole_energy)
-    eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h).clip(0) * \
+    # E_h = np.mean(hole_energy)
+    eh_loss = np.random.uniform(0, dist_2D[:, 5] - hole_energy1).clip(0) * \
         happen * energy_eh_ind
     dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
     # hole_energy = hole_energy + np.mean(eh_loss)
@@ -1800,7 +1802,7 @@ def main(opt):
     hw_start = Eg + 0.05  # eV
     hw_end = 2.5  # eV
     hw_step = 0.1  # eV
-    hw_test = 2.5  # eV
+    hw_test = 1.5  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
