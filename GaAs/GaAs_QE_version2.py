@@ -58,13 +58,13 @@ EB_data = np.genfromtxt('GaAs_Band_Bending.csv', delimiter=',')
 func0 = interp1d(EB_data[:, 0] * 1e6, EB_data[:, 1])
 E_B = func0(N_A)
 W_B = np.sqrt(2 * eps * E_B / ec / N_A) * 10**9  # nm
-#print(Eg, E_B, W_B, DEg, E_T)
+# print(Eg, E_B, W_B, DEg, E_T)
 E_A = 0.01  # eV, electron affinity
 thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 50e-12  # s
+total_time = 100e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -663,6 +663,28 @@ def electron_acoustic_tranfer_energy(dist_2D, Rate, stept):
     return dist_2D, happen
 
 
+def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept):
+    Num = len(dist)
+    P_ab = stept * Rate_ab
+    P_em = stept * Rate_em
+
+    P_ab_ind = np.random.uniform(0, 1, Num) <= P_ab
+    P_em_ind = np.random.uniform(0, 1, Num) <= P_em
+    '''
+    P_trans = P_ab + P_em
+    P_random_ind1 = P_trans <= 1
+    P_random_ind2 = P_trans > 1
+    P_random = np.random.uniform(0, 1) * P_random_ind1 + \
+        np.random.uniform(0, P_trans) * P_random_ind2
+    P_ab_ind = P_random <= P_ab
+    P_em_ind = ((P_random > P_ab) & (P_random <= P_ab + P_em))
+    '''
+    happen = P_ab_ind + P_em_ind
+    dist[:, 5] = dist[:, 5] + E_lo * P_ab_ind
+    dist[:, 5] = dist[:, 5] - E_lo * P_em_ind
+    return dist, happen
+
+
 def electron_optical_transfer_energy(dist, Rate_ab,
                                      Rate_em, E_ab, E_em, stept):
     new_valley_dist = []
@@ -715,26 +737,76 @@ def electron_optical_transfer_energy1(dist_2D, Rate_ab, Rate_em, E_ab, E_em,
     return dist_2D, new_valley_dist.tolist()
 
 
-def renew_distribution(dist_2D, happen):
-    # ---- renew the velocity and direction after scattering -----
+def renew_distribution1(dist_2D, happen):
+    '''renew the velocity and direction after scattering
+    r is a random number uniforly distribution between 0 and 1
+    for all scattering:
+        phi = 2*pi*r
+    1. for isotropic scattering (acoustic and opical phonon scattering):
+        cos(theta) = 1-2*r
+    2. for POP:
+        cos(theta) = ((1+xi)-(1+2*xi)**r)/xi
+        xi = 2*sqrt(gamma_E*gamma_Ep)/(sqrt(gamma_E)-sqrt(gamma_Ep))**2
+    3. for Coulomb scattering:
+        cos(theta)=1-2*r/(1+4*k**2*LD**2*(1-r))
+    '''
     Num = len(dist_2D)
     energy_ind = dist_2D[:, 5] > 0
     happen = happen * energy_ind
-    phi = two_pi * np.random.uniform(0, 1, Num)
-    theta = np.arccos(1 - 2 * np.random.uniform(0, 1, Num))
+    r = np.random.uniform(0, 1, Num)
+    phi = two_pi * r
+    theta = np.arccos(1 - 2 * r)
     dist_2D[:, 4] = dist_2D[:, 4] * (~happen) + np.sqrt(
         2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9 * happen
     dist_2D[:, 2] = dist_2D[:, 4] * np.cos(theta) * happen + \
         dist_2D[:, 2] * (~happen)
-    dist_2D[:, 3] = dist_2D[:, 4] * np.sin(theta) * np.cos(phi) * happen +\
+    dist_2D[:, 3] = dist_2D[:, 4] * np.sin(theta) * np.sin(phi) * happen +\
         dist_2D[:, 3] * (~happen)
+    return dist_2D
+
+
+def renew_distribution(dist_2D, happen):
+    '''renew the velocity and direction after scattering
+    dist_2D = [z, y, vz, vy, v, E]
+    r is a random number uniforly distribution between 0 and 1
+    for all scattering:
+        phi = 2*pi*r
+    1. for isotropic scattering (acoustic and opical phonon scattering):
+        cos(theta) = 1-2*r
+    2. for POP:
+        cos(theta) = ((1+xi)-(1+2*xi)**r)/xi
+        xi = 2*sqrt(gamma_E*gamma_Ep)/(sqrt(gamma_E)-sqrt(gamma_Ep))**2
+    3. for Coulomb scattering:
+        cos(theta)=1-2*r/(1+4*k**2*LD**2*(1-r))
+    '''
+    Num = len(dist_2D)
+    r = np.random.uniform(0, 1, Num)
+    phi0 = two_pi * r
+    theta0 = np.arccos(1 - 2 * r)
+    energy_ind = dist_2D[:, 5] > 0
+    happen = happen * energy_ind
+    r = np.random.uniform(0, 1, Num)
+    phi = two_pi * r
+    theta = np.arccos(1 - 2 * r)
+    dist_2D[:, 4] = dist_2D[:, 4] * (~happen) + np.sqrt(
+        2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9 * happen
+    v_xp = dist_2D[:, 4] * np.sin(theta) * np.cos(phi) * happen +\
+        dist_2D[:, 3] * (~happen)
+    v_yp = dist_2D[:, 4] * np.sin(theta) * np.sin(phi) * happen +\
+        dist_2D[:, 3] * (~happen)
+    v_zp = dist_2D[:, 4] * np.cos(theta) * happen + \
+        dist_2D[:, 2] * (~happen)
+    dist_2D[:, 2] = dist_2D[:, 2] * (~happen) + \
+        (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
+    dist_2D[:, 3] = dist_2D[:, 3] * (~happen) + \
+        v_xp * np.sin(phi0) * np.cos(theta0) + \
+        v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0)
     return dist_2D
 
 
 def gamma_scattering(dist_2D, hole_energy, stept):
     # electrons in Gamma valley begin scattering
     tempEnergy = dist_2D[:, 5].clip(0.001)
-    Num = len(dist_2D)
     # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
     Rate_ei = impurity_scattering(dist_2D[:, 5], 1)
     # e-h scattering rate
@@ -804,7 +876,6 @@ def gamma_scattering(dist_2D, hole_energy, stept):
 
 def L_scattering(dist_2D, hole_energy, stept):
     tempEnergy = dist_2D[:, 5].clip(0.001)
-    Num = len(dist_2D)
     Rate_ei = impurity_scattering(dist_2D[:, 5], 2)
     Rate_eh = electron_hole_scattering(dist_2D[:, 5], 2)
     Rate_ac = acoustic_phonon_scattering(dist_2D[:, 5], 2)
@@ -888,7 +959,6 @@ def L_scattering(dist_2D, hole_energy, stept):
 
 def X_scattering(dist_2D, hole_energy, stept):
     tempEnergy = dist_2D[:, 5].clip(0.001)
-    Num = len(dist_2D)
     Rate_ei = impurity_scattering(dist_2D[:, 5], 3)
     Rate_eh = electron_hole_scattering(dist_2D[:, 5], 3)
     Rate_ac = acoustic_phonon_scattering(dist_2D[:, 5], 3)
@@ -1009,7 +1079,6 @@ def electron_transport(distribution_2D, types):
                           0, len(dist_2D), 0, 0])
         while t < total_time:
             # electrons in Gamma valley begin scattering
-            tempEnergy = dist_2D[:, 5].clip(0.001)
             Num = len(dist_2D)
             # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
             Rate_ei = impurity_scattering(dist_2D[:, 5], 1)
@@ -1199,39 +1268,62 @@ def electron_transport(distribution_2D, types):
             # acounstic phonon scattering rate
             Rate_ac = acoustic_phonon_scattering(dist_2D[:, 5], 1)
 
+            # polar optical phonon scattering rate
+            Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                dist_2D[:, 5], 1)
+
+            # optical phonon scattering rate
             Rate_TL_ab, Rate_TL_em = optical_phonon_scattering(
                 dist_2D[:, 5], 1)
             Rate_TX_ab, Rate_TX_em = optical_phonon_scattering(
                 dist_2D[:, 5], 2)
+            max_Rate_T = np.max([np.mean(Rate_ei), np.mean(Rate_eh),
+                                 np.mean(Rate_ac), np.mean(Rate_TL_ab),
+                                 np.mean(Rate_pop_ab), np.mean(Rate_pop_em),
+                                 np.mean(Rate_TL_em), np.mean(Rate_TX_ab),
+                                 np.mean(Rate_TX_em)])
             if len(dist_L) > 0:
+                Rate_ei = impurity_scattering(dist_L[:, 5], 2)
+                Rate_eh = electron_hole_scattering(dist_L[:, 5], 2)
+                Rate_ac = acoustic_phonon_scattering(dist_L[:, 5], 2)
+                Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                    dist_L[:, 5], 2)
                 Rate_LT_ab, Rate_LT_em = optical_phonon_scattering(
                     dist_L[:, 5], 3)
                 Rate_LL_ab, Rate_LL_em = optical_phonon_scattering(
                     dist_L[:, 5], 4)
                 Rate_LX_ab, Rate_LX_em = optical_phonon_scattering(
                     dist_L[:, 5], 5)
-                max_Rate_L = np.max([np.mean(Rate_LT_ab), np.mean(Rate_LT_em),
+                max_Rate_L = np.max([np.mean(Rate_ei), np.mean(Rate_eh),
+                                     np.mean(Rate_ac), np.mean(Rate_pop_ab),
+                                     np.mean(Rate_pop_em),
+                                     np.mean(Rate_LT_ab), np.mean(Rate_LT_em),
                                      np.mean(Rate_LL_ab), np.mean(Rate_LL_em),
                                      np.mean(Rate_LX_ab), np.mean(Rate_LX_em)])
             else:
                 max_Rate_L = 0
             if len(dist_X) > 0:
+                Rate_ei = impurity_scattering(dist_X[:, 5], 3)
+                Rate_eh = electron_hole_scattering(dist_X[:, 5], 3)
+                Rate_ac = acoustic_phonon_scattering(dist_X[:, 5], 3)
+                Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                    dist_X[:, 5], 3)
                 Rate_XT_ab, Rate_XT_em = optical_phonon_scattering(
                     dist_X[:, 5], 6)
                 Rate_XL_ab, Rate_XL_em = optical_phonon_scattering(
                     dist_X[:, 5], 7)
                 Rate_XX_ab, Rate_XX_em = optical_phonon_scattering(
                     dist_X[:, 5], 8)
-                max_Rate_X = np.max([np.mean(Rate_XT_ab), np.mean(Rate_XT_em),
+                max_Rate_X = np.max([np.mean(Rate_ei), np.mean(Rate_eh),
+                                     np.mean(Rate_ac), np.mean(Rate_pop_ab),
+                                     np.mean(Rate_pop_em),
+                                     np.mean(Rate_XT_ab), np.mean(Rate_XT_em),
                                      np.mean(Rate_XL_ab), np.mean(Rate_XL_em),
                                      np.mean(Rate_XX_ab), np.mean(Rate_XX_em)])
             else:
                 max_Rate_X = 0
 
-            Rate = np.max([np.mean(Rate_ei), np.mean(Rate_eh),
-                           np.mean(Rate_ac), np.mean(Rate_TL_ab),
-                           np.mean(Rate_TL_em), np.mean(Rate_TX_ab),
-                           np.mean(Rate_TX_em), max_Rate_L, max_Rate_X])
+            Rate = np.max([max_Rate_T, max_Rate_L, max_Rate_X])
             stept = 1 / Rate / 25
             t += stept
             # transfer matrix after stept
@@ -1265,7 +1357,13 @@ def electron_transport(distribution_2D, types):
                     dist_2D, Rate_ac, stept)
                 dist_2D = renew_distribution(dist_2D, happen_ac)
 
-                # ----- 2. optical phonon scattering from Gamma to L valley --
+                # ----- 2. polar opical phonon scattering --------
+                Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                    dist_2D[:, 5], 1)
+                dist_2D, happen_pop = electron_polar_transfer_energy(
+                    dist_2D, Rate_pop_ab, Rate_pop_em, stept)
+                dist_2D = renew_distribution(dist_2D, happen_pop)
+                # ----- 3. optical phonon scattering from Gamma to L valley --
                 Rate_TL_ab, Rate_TL_em = optical_phonon_scattering(dist_2D[
                                                                    :, 5], 1)
                 E_TL_ab = -E_L_T + phonon_T_L
@@ -1274,7 +1372,7 @@ def electron_transport(distribution_2D, types):
                     dist_2D, Rate_TL_ab, Rate_TL_em, E_TL_ab, E_TL_em,
                     stept)
 
-                # --- 3. optical phonon scattering from Gamma to X valley ---
+                # --- 4. optical phonon scattering from Gamma to X valley ---
                 if len(dist_2D) > 0:
                     Rate_TX_ab, Rate_TX_em = \
                         optical_phonon_scattering(dist_2D[:, 5], 2)
@@ -1293,18 +1391,19 @@ def electron_transport(distribution_2D, types):
             # ------- B. scattering for electrons in L valley -------
             # ----- e-impurity scattering ---
             if len(dist_L) > 0:
+                # ----- a. e-impurity scattering ---
                 Rate_ei = impurity_scattering(dist_L[:, 5], 2)
                 dist_L, happen_ie = electron_impurity_transfer_energy(
                     dist_L, Rate_ei, stept)
                 dist_L = renew_distribution(dist_L, happen_ie)
 
-                # ----- e-h scattering -----
+                # ----- b. e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_L[:, 5], 2)
                 dist_L, hole_energy, happen_eh = electron_hole_transfer_energy(
                     dist_L, hole_energy, Rate_eh, stept)
                 dist_L = renew_distribution(dist_L, happen_eh)
 
-                # ----- e-phonon scattering -----
+                # ----- c. e-phonon scattering -----
                 # -------- 1. acoustic phonon scattering -------
                 # acoustic phonon scattering probability within stept
                 Rate_ac = acoustic_phonon_scattering(dist_L[:, 5], 2)
@@ -1312,7 +1411,14 @@ def electron_transport(distribution_2D, types):
                     dist_L, Rate_ac, stept)
                 dist_L = renew_distribution(dist_L, happen_ac)
 
-                # ----- 2. optical phonon scattering from L to Gamma valley ---
+                # ----- 2. polar opical phonon scattering --------
+                Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                    dist_L[:, 5], 2)
+                dist_L, happen_pop = electron_polar_transfer_energy(
+                    dist_L, Rate_pop_ab, Rate_pop_em, stept)
+                dist_L = renew_distribution(dist_L, happen_pop)
+
+                # ----- 3. optical phonon scattering from L to Gamma valley ---
                 Rate_LT_ab, Rate_LT_em = optical_phonon_scattering(dist_L[
                                                                    :, 5], 3)
                 E_LT_ab = E_L_T + phonon_T_L
@@ -1321,7 +1427,7 @@ def electron_transport(distribution_2D, types):
                     dist_L, Rate_LT_ab, Rate_LT_em, E_LT_ab, E_LT_em,
                     stept)
 
-                # -------- 3. optical phonon scattering from L to L valley ----
+                # -------- 4. optical phonon scattering from L to L valley ----
                 if len(dist_L) > 0:
                     Rate_LL_ab, Rate_LL_em = \
                         optical_phonon_scattering(dist_L[:, 5], 4)
@@ -1340,7 +1446,7 @@ def electron_transport(distribution_2D, types):
 
                     dist_L = renew_distribution(dist_L, 1)
 
-                # -------- 4. optical phonon scattering from L to X valley ----
+                # -------- 5. optical phonon scattering from L to X valley ----
                 if len(dist_L) > 0:
                     Rate_LX_ab, Rate_LX_em =\
                         optical_phonon_scattering(dist_L[:, 5], 5)
@@ -1377,7 +1483,14 @@ def electron_transport(distribution_2D, types):
                     dist_X, Rate_ac, stept)
                 dist_X = renew_distribution(dist_X, happen_ac)
 
-                # ----- 2. optical phonon scattering from X to Gamma valley ---
+                # ----- 2. polar opical phonon scattering --------
+                Rate_pop_ab, Rate_pop_em = polar_optical_scattering(
+                    dist_X[:, 5], 3)
+                dist_X, happen_pop = electron_polar_transfer_energy(
+                    dist_X, Rate_pop_ab, Rate_pop_em, stept)
+                dist_X = renew_distribution(dist_X, happen_pop)
+
+                # ----- 3. optical phonon scattering from X to Gamma valley ---
                 Rate_XT_ab, Rate_XT_em = optical_phonon_scattering(dist_X[
                                                                    :, 5], 6)
                 E_XT_ab = E_X_T + phonon_T_X
@@ -1386,7 +1499,7 @@ def electron_transport(distribution_2D, types):
                     dist_X, Rate_XT_ab, Rate_XT_em, E_XT_ab, E_XT_em,
                     stept)
 
-                # -------- 3. optical phonon scattering from X to L valley ----
+                # -------- 4. optical phonon scattering from X to L valley ----
                 if len(dist_X) > 0:
                     Rate_XL_ab, Rate_XL_em = optical_phonon_scattering(dist_X[
                         :, 5], 7)
@@ -1396,7 +1509,7 @@ def electron_transport(distribution_2D, types):
                         dist_X, Rate_XL_ab, Rate_XL_em, E_XL_ab, E_XL_em,
                         stept)
 
-                # -------- 4. optical phonon scattering from X to X valley ----
+                # -------- 5. optical phonon scattering from X to X valley ----
                 if len(dist_X) > 0:
                     Rate_XX_ab, Rate_XX_em = optical_phonon_scattering(dist_X[
                         :, 5], 8)
@@ -1554,12 +1667,13 @@ def electron_emitting(surface_2D):
     match_ind = surface_2D[:, 5] >= (E_A - E_sch)
     match_E = surface_2D[match_ind, :]
     surface_trap.extend(surface_2D[(~match_ind), :].tolist())
-    phi = np.random.uniform(0, 2 * pi, (len(match_E), 1))
-    match_E = np.append(match_E, phi, 1)
+    phi = np.random.uniform(0, two_pi, len(match_E))
+    # phi = np.random.uniform(0, 2 * pi, (len(match_E), 1))
+    # match_E = np.append(match_E, phi, 1)
 
     match_E[:, 5] = match_E[:, 5] - E_A + E_sch
     match_E[:, 4] = np.sqrt(2 * match_E[:, 5] / m_e) * \
-        c * 10**9 * np.cos(match_E[:, 6])
+        c * 10**9 * np.cos(phi)
     match = m_e * np.abs(match_E[:, 4]) >= m_T * np.abs(match_E[:, 3])
     emission_2D = match_E[match, :]
     # emission_2D[:, 2] = np.sqrt(emission_2D[:, 4]**2 - emission_2D[:, 3]**2)
@@ -1895,13 +2009,13 @@ def main(opt):
     hw_start = Eg + 0.05  # eV
     hw_end = 2.5  # eV
     hw_step = 0.1  # eV
-    hw_test = 1.5  # eV
+    hw_test = 2.0  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    plot_scattering_rate(3)
+    # plot_scattering_rate(1)
     '''
     P1 = []
     for i in range(len(E_paral)):
@@ -1967,4 +2081,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(0)
+    main(2)
