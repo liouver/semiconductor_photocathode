@@ -418,6 +418,7 @@ def polar_optical_scattering(energy, types):
     types=2, scattering for L valley
     types=3, scattering for X valley
     '''
+    energy = energy.clip(0.001)
     eps_p = (1 / eps_high - 1 / eps)
     N_lo = kB * T / ec / E_lo
     N_lh = 0.125 * N_A
@@ -435,7 +436,7 @@ def polar_optical_scattering(energy, types):
         Rate_ab = ec**3 * E_lo * eps_p / 4 / pi / h_**2 / vel * N_lo * C0_ab
 
         q_min_em = -np.sqrt(2 * m_T * gamma_E) / h_ * \
-            (-1 + np.sqrt((1 - E_lo / energy)clip(0)))
+            (-1 + np.sqrt((1 - E_lo / energy).clip(0)))
         q_max_em = np.sqrt(2 * m_T * gamma_E) / h_ * \
             (1 + np.sqrt((1 - E_lo / energy).clip(0)))
         C0_em = 0.5 * q0**2 * (1 / (q_max_em**2 + q0**2) -
@@ -1777,10 +1778,10 @@ def plot_scattering_rate(types):
     types=2, plot the scattering rate for the electrons in L valley
     types=3, plot the scattering rate for the electrons in X valley
     '''
+    e_energy = np.linspace(0, 1.5, 50)
     if types == 1:
         # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Ni)
         # hole_energy = m_h * hole_velocity**2 / 2 / ec
-        e_energy = np.linspace(0, 1.5, 100)
         # hole_energy = np.linspace(0, 0.1, Ni)
         # carrier_scattering(e_energy, hole_energy)
         Rate_eh = electron_hole_scattering(e_energy, 1)
@@ -1790,25 +1791,29 @@ def plot_scattering_rate(types):
         Rate_TL_ab, Rate_TL_em = optical_phonon_scattering(e_energy, 1)
         Rate_TX_ab, Rate_TX_em = optical_phonon_scattering(e_energy, 2)
         fig, ax = plt.subplots()
-        ax.semilogy(e_energy, Rate_eh, '-', e_energy, Rate_ei, '-',
-                    e_energy, Rate_ac, '-', e_energy, Rate_pop_ab, '-',
-                    e_energy, Rate_pop_em, '-', e_energy, Rate_TL_ab, '-',
-                    e_energy, Rate_TL_em, '-', e_energy, Rate_TX_ab, '-',
-                    e_energy, Rate_TX_em, '-')
-        ax.set_xlabel(r'Electron energy (eV)', fontsize=16)
-        ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=16)
+        ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_pop_em, '>', e_energy, Rate_TL_ab, 's',
+                    e_energy, Rate_TL_em, 'p', e_energy, Rate_TX_ab, '*',
+                    e_energy, Rate_TX_em, 'h')
+        ax.set_xlabel(r'Energy (eV)', fontsize=16)
+        ax.set_ylabel(r'scattering rate in $\Gamma$ valley ($s^{-1}$)',
+                      fontsize=16)
         ax.set_xlim([0, 1.5])
-        plt.legend(['e-hole', 'e-impurity', 'acoustic phonon', 'POP absorb',
-                    'POP emission', 'Gamma to L absorb',
-                    'Gamma to L emission', 'T to X absorb', 'T to X emission'],
-                   frameon=False, fontsize=12)
+        ax.tick_params(which='both', direction='in', labelsize=14)
+        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
+                          'POP absorb',
+                          'POP emission', 'Gamma to L absorb',
+                          'Gamma to L emission', 'Gamma to X absorb',
+                          'Gamma to X emission'],
+                         frameon=False, fontsize=10)
+        plt.setp(leg.get_texts(), color='b')
         plt.tight_layout()
         plt.savefig('Gamma_valley_scattering_rate.pdf', format='pdf')
         plt.show()
     elif types == 2:
         # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Ni)
         # hole_energy = m_h * hole_velocity**2 / 2 / ec
-        e_energy = np.linspace(0, 1.5, 100)
         # hole_energy = np.linspace(0, 0.1, Ni)
         Rate_eh = electron_hole_scattering(e_energy, 2)
         Rate_ei = impurity_scattering(e_energy, 2)
@@ -1818,27 +1823,30 @@ def plot_scattering_rate(types):
         Rate_LL_ab, Rate_LL_em = optical_phonon_scattering(e_energy, 4)
         Rate_LX_ab, Rate_LX_em = optical_phonon_scattering(e_energy, 5)
         fig, ax = plt.subplots()
-        ax.semilogy(e_energy, Rate_eh, '-', e_energy, Rate_ei, '-',
-                    e_energy, Rate_ac, '-', e_energy, Rate_pop_ab, '-',
-                    e_energy, Rate_pop_em, '-', e_energy, Rate_LT_ab, '-',
-                    e_energy, Rate_LT_em, '-', e_energy, Rate_LL_ab, '-',
-                    e_energy, Rate_LL_em, '-', e_energy, Rate_LX_ab, '-',
-                    e_energy, Rate_LX_em, '-')
-        ax.set_xlabel(r'Electron energy (eV)', fontsize=16)
-        ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=16)
+        ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_pop_em, '>', e_energy, Rate_LT_ab, 's',
+                    e_energy, Rate_LT_em, 'p', e_energy, Rate_LL_ab, '*',
+                    e_energy, Rate_LL_em, 'h', e_energy, Rate_LX_ab, '+',
+                    e_energy, Rate_LX_em, 'X')
+        ax.set_xlabel(r'Energy (eV)', fontsize=16)
+        ax.set_ylabel(r'scattering rate in L valley ($s^{-1}$)', fontsize=16)
         ax.set_xlim([0, 1.5])
-        plt.legend(['e-hole', 'e-impurity', 'acoustic phonon', 'POP absorb',
-                    'POP emission', 'L to Gamma absorb',
-                    'L to Gamma emission', 'L to L absorb', 'L to L emission',
-                    'L to X absorb', 'L to X emission'],
-                   frameon=False, fontsize=12)
+        ax.tick_params(which='both', direction='in', labelsize=14)
+        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
+                          'POP absorb',
+                          'POP emission', 'L to Gamma absorb',
+                          'L to Gamma emission', 'L to L absorb',
+                          'L to L emission',
+                          'L to X absorb', 'L to X emission'],
+                         frameon=False, fontsize=10)
+        plt.setp(leg.get_texts(), color='b')
         plt.tight_layout()
         plt.savefig('L_valley_scattering_rate.pdf', format='pdf')
         plt.show()
     elif types == 3:
         # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Ni)
         # hole_energy = m_h * hole_velocity**2 / 2 / ec
-        e_energy = np.linspace(0, 1.5, 100)
         # hole_energy = np.linspace(0, 0.1, Ni)
         Rate_eh = electron_hole_scattering(e_energy, 3)
         Rate_ei = impurity_scattering(e_energy, 3)
@@ -1848,20 +1856,24 @@ def plot_scattering_rate(types):
         Rate_XL_ab, Rate_XL_em = optical_phonon_scattering(e_energy, 7)
         Rate_XX_ab, Rate_XX_em = optical_phonon_scattering(e_energy, 8)
         fig, ax = plt.subplots()
-        ax.semilogy(e_energy, Rate_eh, '-', e_energy, Rate_ei, '-',
-                    e_energy, Rate_ac, '-', e_energy, Rate_pop_ab, '-',
-                    e_energy, Rate_pop_em, '-', e_energy, Rate_XT_ab, '-',
-                    e_energy, Rate_XT_em, '-', e_energy, Rate_XL_ab, '-',
-                    e_energy, Rate_XL_em, '-', e_energy, Rate_XX_ab, '-',
-                    e_energy, Rate_XX_em, '-')
-        ax.set_xlabel(r'Electron energy (eV)', fontsize=16)
-        ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=16)
+        ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_pop_em, '>', e_energy, Rate_XT_ab, 's',
+                    e_energy, Rate_XT_em, 'p', e_energy, Rate_XL_ab, '*',
+                    e_energy, Rate_XL_em, 'h', e_energy, Rate_XX_ab, '+',
+                    e_energy, Rate_XX_em, 'X')
+        ax.set_xlabel(r'Energy (eV)', fontsize=16)
+        ax.set_ylabel(r'scattering rate in X valley ($s^{-1}$)', fontsize=16)
         ax.set_xlim([0, 1.5])
-        plt.legend(['e-hole', 'e-impurity', 'acoustic phonon', 'POP absorb',
-                    'POP emission', 'X to Gamma absorb',
-                    'X to Gamma emission', 'X to L absorb', 'X to L emission',
-                    'X to X absorb', 'X to X emission'],
-                   frameon=False, fontsize=12)
+        ax.tick_params(which='both', direction='in', labelsize=14)
+        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
+                          'POP absorb',
+                          'POP emission', 'X to Gamma absorb',
+                          'X to Gamma emission', 'X to L absorb',
+                          'X to L emission',
+                          'X to X absorb', 'X to X emission'],
+                         frameon=False, fontsize=10)
+        plt.setp(leg.get_texts(), color='b')
         plt.tight_layout()
         plt.savefig('X_valley_scattering_rate.pdf', format='pdf')
         plt.show()
@@ -1889,7 +1901,7 @@ def main(opt):
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    plot_scattering_rate(1)
+    plot_scattering_rate(3)
     '''
     P1 = []
     for i in range(len(E_paral)):
