@@ -272,34 +272,36 @@ def impurity_scattering(energy, types):
     types=2, scattering for L valley
     types=3, scattering for X valley
     '''
-    energy = energy.clip(0.001)
+    energy = energy.clip(0.0001)
+    E0 = energy
+    n_i = N_A  # m**-3, impurity concentration
+    T_i = T
     if types == 1:
-        k_e = np.sqrt(2 * m_T * energy * ec) / h_  # 1/m, wavevector
-        n_i = N_A  # m**-3, impurity concentration
+        gamma_E = energy * (1 + alpha_T * energy)
+        k_e = np.sqrt(2 * m_T * gamma_E * ec) / h_  # 1/m, wavevector
         # T_e = np.mean(energy) * ec / kB
-        a2 = (eps * kB * T) / (n_i * ec**2)  # m**2
-        # print(4 * a2 * k_e**2)
-        # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
-        Rate_ei = (n_i * ec**4 * m_T) / (8 * pi * eps**2 * h_**3 * k_e**3) \
-            * (np.log(1 + 4 * a2 * k_e**2) -
-               (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
+        Bs = np.sqrt(n_i * ec**2 / eps / kB / T_i)  # 1/m
+        b = 4 * k_e**2 / Bs**2
+        # print(b**2 / (1 + b), np.log(1 + b) - b / (1 + b))
+        # e-impurity scattering rate, (C. Jacoboni, RMP 55,645, 1983)
+        Rate_ei = n_i * ec**4 * (1 + 2 * alpha_T * E0) / 32 / np.sqrt(2) / \
+            pi / eps**2 / np.sqrt(m_T) / (gamma_E * ec)**1.5 * b**2 / (1 + b)
     elif types == 2:
-        k_e = np.sqrt(2 * m_L * energy * ec) / h_  # 1/m, wavevector
-        n_i = N_A  # m**-3, impurity concentration
-        a2 = (eps * kB * T) / (n_i * ec**2)  # m**2
-        # print(4 * a2 * k_e**2)
-        # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
-        Rate_ei = (n_i * ec**4 * m_L) / (8 * pi * eps**2 * h_**3 * k_e**3) \
-            * (np.log(1 + 4 * a2 * k_e**2) -
-               (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
+        gamma_E = energy * (1 + alpha_L * energy)
+        k_e = np.sqrt(2 * m_L * gamma_E * ec) / h_  # 1/m, wavevector
+        Bs = np.sqrt(n_i * ec**2 / eps / kB / T_i)  # 1/m
+        b = 4 * k_e**2 / Bs**2
+        # e-impurity scattering rate, (C. Jacoboni, RMP 55,645, 1983)
+        Rate_ei = n_i * ec**4 * (1 + 2 * alpha_L * E0) / 32 / np.sqrt(2) / \
+            pi / eps**2 / np.sqrt(m_L) / (gamma_E * ec)**1.5 * b**2 / (1 + b)
     elif types == 3:
-        k_e = np.sqrt(2 * m_X * energy * ec) / h_  # 1/m, wavevector
-        n_i = N_A  # m**-3, impurity concentration
-        a2 = (eps * kB * T) / (n_i * ec**2)  # m**2
-        # e-impurity scattering rate, (Y. Nishimura, Jnp. J. Appl. Phys.)
-        Rate_ei = (n_i * ec**4 * m_X) / (8 * pi * eps**2 * h_**3 * k_e**3) \
-            * (np.log(1 + 4 * a2 * k_e**2) -
-               (4 * a2 * k_e**2) / (1 + 4 * a2 * k_e**2))
+        gamma_E = energy * (1 + alpha_X * energy)
+        k_e = np.sqrt(2 * m_X * gamma_E * ec) / h_  # 1/m, wavevector
+        Bs = np.sqrt(n_i * ec**2 / eps / kB / T_i)  # 1/m
+        b = 4 * k_e**2 / Bs**2
+        # e-impurity scattering rate, (C. Jacoboni, RMP 55,645, 1983)
+        Rate_ei = n_i * ec**4 * (1 + 2 * alpha_X * E0) / 32 / np.sqrt(2) / \
+            pi / eps**2 / np.sqrt(m_X) / (gamma_E * ec)**1.5 * b**2 / (1 + b)
     else:
         print('Wrong electron impurity scattering')
     return Rate_ei
@@ -311,23 +313,26 @@ def electron_hole_scattering(energy, types):
     types=2, scattering for L valley
     types=3, scattering for X valley
     '''
-    energy = energy.clip(0.001)
-    n_h = 0.5 * N_A  # m**-3, hole concentration
-    T_h = 298  # K, hole temperature
-    T_e = np.mean(energy) * ec / kB  # K, electron temperature
-    beta2 = n_h * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
+    energy = energy.clip(0.0001)
+    E0 = energy
+    n_h = 0.05 * N_A  # m**-3, hole concentration
+    T_h = T  # K, hole temperature
+    beta2 = n_h * ec**2 / eps / kB / T_h
     if types == 1:
-        b = 8 * m_T * energy * ec / h_**2 / beta2
-        Rate_eh = n_h * ec**4 / 16 / 2**0.5 / pi / eps**2 / m_T**0.5 / \
-            energy**1.5 / ec**1.5 * (np.log(1 + b) - b / (1 + b))
+        gamma_E = energy * (1 + alpha_T * energy)
+        b = 8 * m_T * gamma_E * ec / h_**2 / beta2
+        Rate_eh = n_h * ec**4 / 32 / 2**0.5 / pi / eps**2 / m_T**0.5 / \
+            gamma_E**1.5 / ec**1.5 * b**2 / (1 + b) * (1 + 2 * alpha_T * E0)
     elif types == 2:
-        b = 8 * m_L * energy * ec / h_**2 / beta2
-        Rate_eh = n_h * ec**4 / 16 / 2**0.5 / pi / eps**2 / m_L**0.5 / \
-            energy**1.5 / ec**1.5 * (np.log(1 + b) - b / (1 + b))
+        gamma_E = energy * (1 + alpha_L * energy)
+        b = 8 * m_L * gamma_E * ec / h_**2 / beta2
+        Rate_eh = n_h * ec**4 / 32 / 2**0.5 / pi / eps**2 / m_L**0.5 / \
+            energy**1.5 / ec**1.5 * b**2 / (1 + b) * (1 + 2 * alpha_L * E0)
     elif types == 3:
-        b = 8 * m_X * energy * ec / h_**2 / beta2
-        Rate_eh = n_h * ec**4 / 16 / 2**0.5 / pi / eps**2 / m_X**0.5 / \
-            energy**1.5 / ec**1.5 * (np.log(1 + b) - b / (1 + b))
+        gamma_E = energy * (1 + alpha_X * energy)
+        b = 8 * m_X * gamma_E * ec / h_**2 / beta2
+        Rate_eh = n_h * ec**4 / 32 / 2**0.5 / pi / eps**2 / m_X**0.5 / \
+            energy**1.5 / ec**1.5 * b**2 / (1 + b) * (1 + 2 * alpha_X * E0)
     else:
         print('Wrong electron-hole scattering type')
     return Rate_eh
@@ -2075,7 +2080,7 @@ def main(opt):
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    # plot_scattering_rate(1)
+    plot_scattering_rate(1)
     '''
     P1 = []
     for i in range(len(E_paral)):
@@ -2141,4 +2146,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(0)
