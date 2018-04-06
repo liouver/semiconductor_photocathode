@@ -82,6 +82,9 @@ alpha_T = 0.64  # 1/eV, nonparabolicity factor for Gamma valley
 alpha_L = 0.461  # 1/eV, for L valley
 alpha_X = 0.204  # 1/eV, for X valley
 
+# ---- set parameters for piezoelectric acoustic phonon ------
+K_av = 0.0252
+
 # ----- set parameters for polar optical phonon scattering -----
 E_lo = 0.03536  # eV, longitudinal optical phonon energy
 
@@ -338,58 +341,6 @@ def electron_hole_scattering(energy, types):
     return Rate_eh
 
 
-def carrier_scattering(electron_energy, hole_energy):
-    ''' PRB 36, 6018 (1987) '''
-    n = len(electron_energy)
-    # electron_energy = electron_energy.clip(0.001)
-    k_e = np.sqrt(2 * m_T * electron_energy * ec) / h_  # 1/m, wavevector
-    k_h = np.sqrt(2 * m_h * hole_energy * ec) / h_
-    T_e = np.mean(electron_energy) * ec / kB
-    T_h = np.mean(hole_energy) * ec / kB
-    # n0 = N_A  # hole number
-    # n_e = N_A  # electron number
-    n_h = 0.1 * N_A  # m**-3, hole concentration
-    mu = m_T * m_hh / (m_T + m_hh)
-    beta2 = n_h * ec**2 / eps / kB * (1 / T_e + 1 / T_h)
-    # print(beta2)
-    Rate_eh = []
-    # Rate_he = []
-    # Rate_ee = []
-    # Rate_hh = []
-    ke = np.linspace(min(k_e), max(k_e), 100)
-    # print(electron_energy, 4 * ke**2 / beta2)
-    # kh = np.linspace(min(k_h), 1. * max(k_h), 100)
-    for i in range(len(ke)):
-        Q_eh = 2 * mu * np.abs(ke[i] / m_T - k_h / m_h)
-        # Q_he = 2 * mu * np.abs(kh[i] / m_h - k_e / m_T)
-        Rate1 = n_h * mu * ec**4 / two_pi / eps**2 / h_**3 / n * \
-            sum(Q_eh / beta2 / (Q_eh**2 + beta2))
-        '''Rate2 = n_e * mu * ec**4 / two_pi / eps**2 / h_**3 / n * \
-            sum(Q_he / beta2 / (Q_he**2 + beta2))
-        Rate3 = n_e * m_T * ec**4 / 4 / pi / eps**2 / h_**3 / n * \
-            sum(np.abs(ke[i] - k_e) / beta2 / ((ke[i] - k_e)**2 + beta2))
-        Rate4 = n_h * m_h * ec**4 / 4 / pi / eps**2 / h_**3 / n * \
-            sum(np.abs(kh[i] - k_h) / beta2 / ((kh[i] - k_h)**2 + beta2))'''
-        Rate_eh.append(Rate1)
-        # Rate_he.append(Rate2)
-        # Rate_ee.append(Rate3)
-        # Rate_hh.append(Rate4)
-    Rate_eh = np.array(Rate_eh)
-    # Rate_he = np.array(Rate_he)
-    # Rate_ee = np.array(Rate_ee)
-    # Rate_hh = np.array(Rate_hh)
-    func_eh = interp1d(ke, Rate_eh)
-    Rate_eh = func_eh(k_e)
-    '''
-    fig, ax = plt.subplots()
-    ax.semilogy(ke, Rate_eh, '.', kh, Rate_he, '.', ke, Rate_ee, '.')
-    ax.set_xlabel(r'Electron energy (eV)', fontsize=14)
-    ax.set_ylabel(r'scattering rate ($s^{-1}$)', fontsize=14)
-    plt.tight_layout()
-    plt.show()'''
-    return Rate_eh
-
-
 def acoustic_phonon_scattering(energy, types):
     '''
     types=1, scattering for Gamma valley
@@ -417,6 +368,38 @@ def acoustic_phonon_scattering(energy, types):
     return Rate_ac
 
 
+def piezoelectric_phonon_scattering(energy, types):
+    '''
+    types=1, scattering for Gamma valley
+    types=2, scattering for L valley
+    types=3, scattering for X valley
+    '''
+    energy = energy.clip(0.001)
+    n_h = 1 * N_A  # m**-3, hole concentration
+    beta2 = n_h * ec**2 / eps / kB / T
+    if types == 1:
+        gamma_E = energy * (1 + alpha_T * energy)
+        vel = np.sqrt(2 * np.abs(gamma_E) * ec / m_T)
+        b = 8 * m_T * gamma_E * ec / h_**2 / beta2
+        Rate_pap = ec**2 * K_av * kB * T / 4 / pi / eps / h_**2 / vel * \
+            (np.log(1 + b))
+    elif types == 2:
+        gamma_E = energy * (1 + alpha_L * energy)
+        b = 8 * m_L * gamma_E * ec / h_**2 / beta2
+        vel = np.sqrt(2 * np.abs(gamma_E) * ec / m_L)
+        Rate_pap = ec**2 * K_av * kB * T / 4 / pi / eps / h_**2 / vel * \
+            (np.log(1 + b))
+    elif types == 3:
+        gamma_E = energy * (1 + alpha_X * energy)
+        b = 8 * m_X * gamma_E * ec / h_**2 / beta2
+        vel = np.sqrt(2 * np.abs(gamma_E) * ec / m_X)
+        Rate_pap = ec**2 * K_av * kB * T / 4 / pi / eps / h_**2 / vel * \
+            (np.log(1 + b))
+    else:
+        print('Wrong electron-hole scattering type')
+    return Rate_pap
+
+
 def polar_optical_scattering(energy, types):
     '''
     types=1, scattering for Gamma valley
@@ -426,8 +409,8 @@ def polar_optical_scattering(energy, types):
     energy = energy.clip(0.001)
     eps_p = (1 / eps_high - 1 / eps)
     N_lo = kB * T / ec / E_lo
-    N_lh = 0.125 * N_A
-    q0 = ec**2 * m_lh * (3 * N_lh)**(1 / 3) / pi**(4 / 3) / eps / h_**2
+    N_i = N_A
+    q0 = np.sqrt(N_i * ec**2 / eps / kB / T)
     if types == 1:
         gamma_E = energy * (1 + alpha_T * energy)
         vel = np.sqrt(2 * np.abs(energy) * ec / m_T)
@@ -1966,12 +1949,14 @@ def plot_scattering_rate(types):
         Rate_eh = electron_hole_scattering(e_energy, 1)
         Rate_ei = impurity_scattering(e_energy, 1)
         Rate_ac = acoustic_phonon_scattering(e_energy, 1)
+        Rate_pap = piezoelectric_phonon_scattering(e_energy, 1)
         Rate_pop_ab, Rate_pop_em = polar_optical_scattering(e_energy, 1)
         Rate_TL_ab, Rate_TL_em = optical_phonon_scattering(e_energy, 1)
         Rate_TX_ab, Rate_TX_em = optical_phonon_scattering(e_energy, 2)
         fig, ax = plt.subplots()
         ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
-                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pap, '+',
+                    e_energy, Rate_pop_ab, '<',
                     e_energy, Rate_pop_em, '>', e_energy, Rate_TL_ab, 's',
                     e_energy, Rate_TL_em, 'p', e_energy, Rate_TX_ab, '*',
                     e_energy, Rate_TX_em, 'h')
@@ -1980,8 +1965,8 @@ def plot_scattering_rate(types):
                       fontsize=16)
         ax.set_xlim([0, 1.5])
         ax.tick_params(which='both', direction='in', labelsize=14)
-        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
-                          'POP absorb',
+        leg = plt.legend(['e-hole', 'e-impurity', 'DAP',
+                          'PAP', 'POP absorb',
                           'POP emission', 'Gamma to L absorb',
                           'Gamma to L emission', 'Gamma to X absorb',
                           'Gamma to X emission'],
@@ -1997,23 +1982,25 @@ def plot_scattering_rate(types):
         Rate_eh = electron_hole_scattering(e_energy, 2)
         Rate_ei = impurity_scattering(e_energy, 2)
         Rate_ac = acoustic_phonon_scattering(e_energy, 2)
+        Rate_pap = piezoelectric_phonon_scattering(e_energy, 2)
         Rate_pop_ab, Rate_pop_em = polar_optical_scattering(e_energy, 2)
         Rate_LT_ab, Rate_LT_em = optical_phonon_scattering(e_energy, 3)
         Rate_LL_ab, Rate_LL_em = optical_phonon_scattering(e_energy, 4)
         Rate_LX_ab, Rate_LX_em = optical_phonon_scattering(e_energy, 5)
         fig, ax = plt.subplots()
         ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
-                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pap, '+',
+                    e_energy, Rate_pop_ab, '<',
                     e_energy, Rate_pop_em, '>', e_energy, Rate_LT_ab, 's',
                     e_energy, Rate_LT_em, 'p', e_energy, Rate_LL_ab, '*',
-                    e_energy, Rate_LL_em, 'h', e_energy, Rate_LX_ab, '+',
+                    e_energy, Rate_LL_em, 'h', e_energy, Rate_LX_ab, '4',
                     e_energy, Rate_LX_em, 'X')
         ax.set_xlabel(r'Energy (eV)', fontsize=16)
         ax.set_ylabel(r'scattering rate in L valley ($s^{-1}$)', fontsize=16)
         ax.set_xlim([0, 1.5])
         ax.tick_params(which='both', direction='in', labelsize=14)
-        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
-                          'POP absorb',
+        leg = plt.legend(['e-hole', 'e-impurity', 'DAP',
+                          'PAP', 'POP absorb',
                           'POP emission', 'L to Gamma absorb',
                           'L to Gamma emission', 'L to L absorb',
                           'L to L emission',
@@ -2030,23 +2017,25 @@ def plot_scattering_rate(types):
         Rate_eh = electron_hole_scattering(e_energy, 3)
         Rate_ei = impurity_scattering(e_energy, 3)
         Rate_ac = acoustic_phonon_scattering(e_energy, 3)
+        Rate_pap = piezoelectric_phonon_scattering(e_energy, 3)
         Rate_pop_ab, Rate_pop_em = polar_optical_scattering(e_energy, 3)
         Rate_XT_ab, Rate_XT_em = optical_phonon_scattering(e_energy, 6)
         Rate_XL_ab, Rate_XL_em = optical_phonon_scattering(e_energy, 7)
         Rate_XX_ab, Rate_XX_em = optical_phonon_scattering(e_energy, 8)
         fig, ax = plt.subplots()
         ax.semilogy(e_energy, Rate_eh, 'o', e_energy, Rate_ei, 'v',
-                    e_energy, Rate_ac, '^', e_energy, Rate_pop_ab, '<',
+                    e_energy, Rate_ac, '^', e_energy, Rate_pap, '+',
+                    e_energy, Rate_pop_ab, '<',
                     e_energy, Rate_pop_em, '>', e_energy, Rate_XT_ab, 's',
                     e_energy, Rate_XT_em, 'p', e_energy, Rate_XL_ab, '*',
-                    e_energy, Rate_XL_em, 'h', e_energy, Rate_XX_ab, '+',
+                    e_energy, Rate_XL_em, 'h', e_energy, Rate_XX_ab, '4',
                     e_energy, Rate_XX_em, 'X')
         ax.set_xlabel(r'Energy (eV)', fontsize=16)
         ax.set_ylabel(r'scattering rate in X valley ($s^{-1}$)', fontsize=16)
         ax.set_xlim([0, 1.5])
         ax.tick_params(which='both', direction='in', labelsize=14)
-        leg = plt.legend(['e-hole', 'e-impurity', 'acoustic phonon',
-                          'POP absorb',
+        leg = plt.legend(['e-hole', 'e-impurity', 'DAP',
+                          'PAP', 'POP absorb',
                           'POP emission', 'X to Gamma absorb',
                           'X to Gamma emission', 'X to L absorb',
                           'X to L emission',
