@@ -27,7 +27,7 @@ start_time = time.time()
 pi = np.pi
 two_pi = 2 * pi
 eps0 = 8.85419e-12  # F/m, vacuum dielectric constant
-eps = 12.9 * eps0  # F/m, dielectric constant for low frequency
+eps = 12.85 * eps0  # F/m, dielectric constant for low frequency
 eps_high = 10.89 * eps0  # F/m, for high frequency
 kB = 1.38066e-23  # J/K, Boltzmann constant
 ec = 1.60219e-19  # C
@@ -38,8 +38,8 @@ m_hh = 0.5 * m_e  # effective heavy hole mass
 m_lh = 0.076 * m_e  # effective light hole mass
 m_so = 0.145 * m_e  # effective split-off band mass
 m_T = 0.063 * m_e  # Gamma valley effective electron mass
-m_L = 0.222 * m_e  # L valley effective electron mass
-m_X = 0.58 * m_e  # X valley effective electron mass
+m_L = 0.55 * m_e  # L valley effective electron mass
+m_X = 0.85 * m_e  # X valley effective electron mass
 m_h = (m_hh**1.5 + m_lh**1.5 + m_so**1.5)**(2 / 3)
 
 # ----Set material parameters----
@@ -94,10 +94,10 @@ num_L_valley = 4  # for L valley
 num_X_valley = 3  # for X valley
 E_L_T = 0.29  # eV, splitting energy between Gamma and L valley
 E_X_T = 0.48  # eV, splitting energy between Gamma and X valley
-D_T_L = 10e10  # eV/m, optical coupling constant for between G and L valley
+D_T_L = 6.5e10  # eV/m, optical coupling constant for between G and L valley
 D_T_X = 10e10  # eV/m, between Gamma to X valley
-D_L_L = 10e10  # eV/m, between L and L valley
-D_L_X = 5e10  # eV/m, between L and X valley
+D_L_L = 5e10  # eV/m, between L and L valley
+D_L_X = 2.9e10  # eV/m, between L and X valley
 D_X_X = 7e10  # eV/m, between X and X valley
 phonon_T_L = 0.0278  # eV, optical phonon energy between G and L valley
 phonon_T_X = 0.0299
@@ -495,42 +495,42 @@ def optical_phonon_scattering(energy, types):
         Rate_ab = D_T_L**2 * m_T**1.5 * num_L_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_L * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_T * tempEnergy) *\
-            (1 + alpha_T * tempEnergy)**0.5
+            (1 + 2 * alpha_L * tempEnergy) *\
+            (1 + alpha_L * tempEnergy)**0.5
         tempEnergy = (energy - phonon_T_L - E_L_T).clip(0)
         Rate_em = D_T_L**2 * m_T**1.5 * num_L_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_L * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_T * tempEnergy) *\
-            (1 + alpha_T * tempEnergy)**0.5
+            (1 + 2 * alpha_L * tempEnergy) *\
+            (1 + alpha_L * tempEnergy)**0.5
     elif types == 2:
         N_op = kB * T / ec / phonon_T_X
         tempEnergy = (energy + phonon_T_X - E_X_T).clip(0)
         Rate_ab = D_T_X**2 * m_T**1.5 * num_X_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_X * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_T * tempEnergy) *\
-            (1 + alpha_T * tempEnergy)**0.5
+            (1 + 2 * alpha_X * tempEnergy) *\
+            (1 + alpha_X * tempEnergy)**0.5
         tempEnergy = (energy - phonon_T_X - E_X_T).clip(0)
         Rate_em = D_T_X**2 * m_T**1.5 * num_X_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_X * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_T * tempEnergy) *\
-            (1 + alpha_T * tempEnergy)**0.5
+            (1 + 2 * alpha_X * tempEnergy) *\
+            (1 + alpha_X * tempEnergy)**0.5
     elif types == 3:
         N_op = kB * T / ec / phonon_T_L
         tempEnergy = (energy + phonon_T_L + E_L_T).clip(0)
         Rate_ab = D_T_L**2 * m_L**1.5 * num_T_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_L * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_L * tempEnergy) *\
-            (1 + alpha_L * tempEnergy)**0.5
+            (1 + 2 * alpha_T * tempEnergy) *\
+            (1 + alpha_T * tempEnergy)**0.5
         tempEnergy = (energy - phonon_T_L + E_L_T).clip(0)
         Rate_em = D_T_L**2 * m_L**1.5 * num_T_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_L * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_L * tempEnergy) *\
-            (1 + alpha_L * tempEnergy)**0.5
+            (1 + 2 * alpha_T * tempEnergy) *\
+            (1 + alpha_T * tempEnergy)**0.5
     elif types == 4:
         N_op = kB * T / ec / phonon_L_L
         tempEnergy = (energy + phonon_L_L).clip(0)
@@ -551,42 +551,42 @@ def optical_phonon_scattering(energy, types):
         Rate_ab = D_L_X**2 * m_L**1.5 * num_X_valley / 2**0.5 /\
             pi / rou / h_**2 / phonon_L_X * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_L * tempEnergy) *\
-            (1 + alpha_L * tempEnergy)**0.5
+            (1 + 2 * alpha_X * tempEnergy) *\
+            (1 + alpha_X * tempEnergy)**0.5
         tempEnergy = (energy - phonon_L_X + E_L_T - E_X_T).clip(0)
         Rate_em = D_L_X**2 * m_L**1.5 * num_X_valley / 2**0.5 /\
             pi / rou / h_**2 / phonon_L_X * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_L * tempEnergy) *\
-            (1 + alpha_L * tempEnergy)**0.5
+            (1 + 2 * alpha_X * tempEnergy) *\
+            (1 + alpha_X * tempEnergy)**0.5
     elif types == 6:
         N_op = kB * T / ec / phonon_T_X
         tempEnergy = (energy + phonon_T_X + E_X_T).clip(0)
         Rate_ab = D_T_X**2 * m_X**1.5 * num_T_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_X * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_X * tempEnergy) *\
-            (1 + alpha_X * tempEnergy)**0.5
+            (1 + 2 * alpha_T * tempEnergy) *\
+            (1 + alpha_T * tempEnergy)**0.5
         tempEnergy = (energy - phonon_T_X + E_X_T).clip(0)
         Rate_em = D_T_X**2 * m_X**1.5 * num_T_valley / 2**0.5 / pi / rou /\
             h_**2 / phonon_T_L * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_X * tempEnergy) *\
-            (1 + alpha_X * tempEnergy)**0.5
+            (1 + 2 * alpha_T * tempEnergy) *\
+            (1 + alpha_T * tempEnergy)**0.5
     elif types == 7:
         N_op = kB * T / ec / phonon_L_X
         tempEnergy = (energy + phonon_L_X - E_L_T + E_X_T).clip(0)
         Rate_ab = D_L_X**2 * m_X**1.5 * num_L_valley / 2**0.5 /\
             pi / rou / h_**2 / phonon_L_X * N_op * ec * \
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_X * tempEnergy) *\
-            (1 + alpha_X * tempEnergy)**0.5
+            (1 + 2 * alpha_L * tempEnergy) *\
+            (1 + alpha_L * tempEnergy)**0.5
         tempEnergy = (energy - phonon_L_X - E_L_T + E_X_T).clip(0)
         Rate_em = D_L_X**2 * m_X**1.5 * num_L_valley / 2**0.5 /\
             pi / rou / h_**2 / phonon_L_X * (N_op + 1) * ec *\
             np.sqrt(ec * tempEnergy) *\
-            (1 + 2 * alpha_X * tempEnergy) *\
-            (1 + alpha_X * tempEnergy)**0.5
+            (1 + 2 * alpha_L * tempEnergy) *\
+            (1 + alpha_L * tempEnergy)**0.5
     elif types == 8:
         N_op = kB * T / ec / phonon_X_X
         tempEnergy = (energy + phonon_X_X).clip(0)
@@ -2069,7 +2069,7 @@ def main(opt):
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    plot_scattering_rate(1)
+    # plot_scattering_rate(3)
     '''
     P1 = []
     for i in range(len(E_paral)):
@@ -2135,4 +2135,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(0)
+    main(1)
