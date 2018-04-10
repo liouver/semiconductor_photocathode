@@ -2069,7 +2069,7 @@ def main(opt):
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    plot_scattering_rate(1)
+    plot_scattering_rate(3)
     '''
     P1 = []
     for i in range(len(E_paral)):
