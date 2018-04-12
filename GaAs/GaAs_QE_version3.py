@@ -49,9 +49,9 @@ rou = 5.32e3  # kg/m**3, density of GaAs
 E_T = kB * T / ec
 Eg = 1.519 - 0.54 * 10**(-3) * T**2 / (T + 204)  # eV, bandgap
 # Tiwari, S, Appl. Phys. Lett. 56, 6 (1990) 563-565. (experiment data)
-# Eg = Eg - 2 * 10**(-11) * np.sqrt(N_A)
+# Eg = Eg - 2 * 10**(-11) * np.sqrt(N_A * 1e-6)
 DEg = 3 * ec / 16 / pi / eps * np.sqrt(ec**2 * N_A / eps / kB / T)
-Eg = Eg - DEg
+# Eg = Eg - DEg
 DE = 0.34  # eV, split-off energy gap
 # E_B = Eg / 3  # only for NA = 10**19 cm**-3
 EB_data = np.genfromtxt('GaAs_Band_Bending.csv', delimiter=',')
@@ -261,11 +261,6 @@ def electron_distribution(hw, types):
         vy = velocity * np.sin(theta) * np.cos(phi)
         distribution_2D.append([z_pos[i], y_pos, vz, vy, velocity, energy[i]])
     distribution_2D = np.array(distribution_2D)  # ([z, y, vz, vy, v, E])'''
-    '''
-    plt.figure()
-    plt.hist(distribution_2D[:, 5], bins=100)
-    plt.show()
-    '''
     return distribution_2D
 
 
@@ -1758,7 +1753,7 @@ def surface_electron_transmission(surface_2D, func_tp):
     return emission_2D, surface_trap
 
 
-def transmission_function1(E_paral, E_trans):
+def transmission_function(E_paral, E_trans):
     # k_trans = np.sqrt(2 * m_T * E_trans * ec) / h_
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
@@ -1801,7 +1796,7 @@ def transmission_function1(E_paral, E_trans):
     return Tp
 
 
-def transmission_function(E_paral, E_trans):
+def transmission_function1(E_paral, E_trans):
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
@@ -1872,8 +1867,37 @@ def transmission_probability(E_paral, E_trans):
     fig, ax = plt.subplots()
     ax.plot(E_paral, Tp[0, :], E_paral, Tp[10, :], E_paral, Tp[20, :])
     ax.legend(['0', '10', '20'])
+    plt.savefig('Emission_rate.pdf', format='pdf')
     plt.show()'''
     return Tp
+
+
+def plot_electron_distribution(hw, types):
+    if types == 1:
+        dist_2D = electron_distribution(hw, 1)
+        fig, ax = plt.subplots()
+        ax.hist(dist_2D[:, 5], bins=100, color='b')
+        ax.set_xlim([0, 0.6])
+        ax.set_ylim([0, 2000])
+        ax.set_xlabel(r'Energy (eV)', fontsize=16)
+        ax.set_ylabel(r'Counts (No.)', fontsize=16)
+        ax.tick_params('both', direction='in', labelsize=14)
+        plt.tight_layout()
+        plt.savefig('energy_distribution.pdf', format='pdf')
+        plt.show()
+    elif types == 2:
+        dist_2D = electron_distribution(hw, 2)
+        fig, ax = plt.subplots()
+        ax.hist(dist_2D[:, 0], bins=200, color='b')
+        ax.set_xlim([0, 2000])
+        ax.set_xlabel(r'Depth (nm)', fontsize=16)
+        ax.set_ylabel(r'Counts (No.)', fontsize=16)
+        ax.tick_params('both', direction='in', labelsize=14)
+        plt.tight_layout()
+        plt.savefig('posization_distribution.pdf', format='pdf')
+        plt.show()
+    else:
+        print('Wrong types')
 
 
 def plot_QE(filename, data):
@@ -2059,27 +2083,33 @@ def compare_data(filename, data):
     plt.show()
 
 
+def plot_surface_emission_probability(E_paral, Tp, func_tp):
+    P1 = []
+    for i in range(len(E_paral)):
+        P1.append((func_tp(E_paral[i], 0.0)[0]).tolist())
+    P1 = np.array(P1)
+    fig, ax = plt.subplots()
+    ax.plot(E_paral, Tp[0, :], E_paral, Tp[10, :], E_paral, Tp[20, :])
+    ax.set_xlabel(r'Electron longitudinal energy (eV)', fontsize=14)
+    ax.set_ylabel(r'Emission probability', fontsize=14)
+    ax.tick_params('both', direction='in', labelsize=12)
+    ax.legend(['0', '0.2', '0.4'])
+    plt.savefig('Emission_rate.pdf', format='pdf')
+    plt.show()
+
+
 def main(opt):
     hw_start = Eg + 0.05  # eV
     hw_end = 2.5  # eV
-    hw_step = 0.1  # eV
+    hw_step = 0.2  # eV
     hw_test = 2.0  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
     Trans_prob = transmission_probability(E_paral, E_trans)
     func_tp = interp2d(E_paral, E_trans, Trans_prob)
-    plot_scattering_rate(3)
-    '''
-    P1 = []
-    for i in range(len(E_paral)):
-        P1.append((func_tp(E_paral[i], 0.0)[0]).tolist())
-    P1 = np.array(P1)
-    fig, ax = plt.subplots()
-    ax.plot(E_paral, Trans_prob[0, :], '.', E_paral, P1)
-    plt.show()'''
     if opt == 1:  # for test
-        dist_2D = electron_distribution(hw_test, 2)
+        dist_2D = electron_distribution(hw_test, 3)
         print('excited electron ratio: ', len(dist_2D) / Ni)
 
         surface_2D, back_2D, trap_2D, dist_2D, time_data = \
@@ -2109,9 +2139,9 @@ def main(opt):
                 electron_transport(dist_2D, 2)
             print('surface electron ratio: ', len(surface_2D) / Ni)
 
-            emiss_2D, surf_trap = electron_emitting(surface_2D)
-            # emiss_2D, surf_trap = surface_electron_transmission(
-            #    surface_2D, func_tp)
+            # emiss_2D, surf_trap = electron_emitting(surface_2D)
+            emiss_2D, surf_trap = surface_electron_transmission(
+                surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
             TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
@@ -2127,7 +2157,9 @@ def main(opt):
         plot_QE(filename, data)
         compare_data(filename, data)
     elif opt == 3:
-        plot_scattering_rate(2)
+        plot_electron_distribution(hw_test, 1)
+        # plot_scattering_rate(2)
+        # plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
         print('Wrong run option')
 
@@ -2135,4 +2167,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(0)
+    main(1)

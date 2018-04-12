@@ -1476,7 +1476,7 @@ def main(opt):
     hw_start = Eg + 0.05  # eV
     hw_end = 2.5  # eV
     hw_step = 0.1  # eV
-    hw_test = 2.48  # eV
+    hw_test = 2.0  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
