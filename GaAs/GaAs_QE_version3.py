@@ -126,47 +126,48 @@ def photon_to_electron(hw):
     # nonparabolicity factor, 1/eV
     # alpha_T = 0.58 + (T - 77) * (0.61 - 0.58) / (300 - 77)
     Ei = random.uniform(Eg, hw - 0.01)
+    Ei = hw
     if Ei >= Eg + DE:
         x = random.randint(1, 6)
         if x in [1, 2, 3]:  # heavy hole
-            E1 = hw - Ei
+            E1 = hw - Eg - DE
             Gamma = 1 + m_hh / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+                                Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_hh / m_T)
             E_e = E1 - DE_h
         elif x == 4:  # light hole
-            E1 = hw - Ei
-            Gamma = 1 + m_lh / m_e + 2 * alpha_T * E1
-            DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+            E1 = hw - Eg - DE
+            Gamma = 1 + m_lh / m_e + 2 * alpha_L * E1
+            DE_h = (1 - np.sqrt(1 - 4 * alpha_L * E1 * (1 + alpha_L * E1) /
+                                Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_lh / m_T)
             E_e = E1 - DE_h
         elif x in [5, 6]:  # split-off band
-            E1 = hw - Ei
-            Gamma = 1 + m_so / m_e + 2 * alpha_T * E1
-            DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+            E1 = hw - Eg - DE
+            Gamma = 1 + m_so / m_e + 2 * alpha_X * E1
+            DE_h = (1 - np.sqrt(1 - 4 * alpha_X * E1 * (1 + alpha_X * E1) /
+                                Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_so / m_T)
             E_e = E1 - DE_h
     elif Eg <= Ei < Eg + DE:
         x = random.randint(1, 4)
         if x in [1, 2, 3]:  # heavy hole
-            E1 = hw - Ei
+            E1 = hw - Eg
             Gamma = 1 + m_hh / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+                                Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_hh / m_T)
             E_e = E1 - DE_h
         elif x == 4:  # light hole
-            E1 = hw - Ei
-            Gamma = 1 + m_lh / m_e + 2 * alpha_T * E1
-            DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+            E1 = hw - Eg
+            Gamma = 1 + m_lh / m_e + 2 * alpha_L * E1
+            DE_h = (1 - np.sqrt(1 - 4 * alpha_L * E1 * (1 + alpha_L * E1) /
+                                Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_lh / m_T)
             E_e = E1 - DE_h
     else:
-        E_e = 0.02
+        E_e = 0.002
     # print(DE_h, E_e)
     return E_e
 
@@ -184,12 +185,12 @@ def electron_distribution(hw, types):
         energy = np.array(energy)
     elif types == 2:  # use density of state from reference
         DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
-        func1 = interp1d(DOS[:, 0], DOS[:, 1])
-        '''
+        func1 = interp1d(DOS[:, 0], DOS[:, 2])
+        
         fig, ax = plt.subplots()
-        e = np.linspace(-2.8, 3, 100)
+        e = np.linspace(-2.5, 2.5, 100)
         ax.plot(e, func1(e))
-        plt.show()'''
+        plt.show()
         E0 = Eg
         norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
                                    limit=10000)
@@ -197,30 +198,26 @@ def electron_distribution(hw, types):
         for i in range(len(Ei)):
             num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.001 / norm
             E_num = np.empty(int(num))
-            E_num.fill(Ei[i] - E0)
+            E_num.fill(Ei[i] - Eg)
             energy.extend(E_num)
         np.random.shuffle(energy)
     elif types == 3:  # use density of state, minus excess energy
         DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
         func1 = interp1d(DOS[:, 0], DOS[:, 1])
-        '''
-        fig, ax = plt.subplots()
-        e = np.linspace(-2.8, 3, 100)
-        ax.plot(e, func1(e))
-        plt.show()'''
         E0 = Eg
-        norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
-                                   limit=10000)
-        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))
+        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))       
         for i in range(len(Ei)):
-            E1 = hw - Ei[i]
-            Gamma = 1 + m_lh / m_e + 2 * alpha_T * E1
+            E1 = Ei[i] - Eg
+            Gamma = 1 + m_h / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
-                                Gamma**2)) / (2 * alpha_T) / Gamma
+                                Gamma**2)) / (2 * alpha_T) * Gamma
+            norm, err = integrate.quad(lambda e: func1(e + DE_h - hw) * func1(e),\
+                                         E0, hw - DE_h, limit=10000)
             num = 1.5 * Ni * func1(Ei[i]) * \
-                func1(Ei[i] - DE_h - hw) * 0.001 / norm
+                func1(Ei[i] + DE_h - hw) * 0.001 / norm
+            # print(Ei[i], DE_h, num)
             E_num = np.empty(int(num))
-            E_num.fill(Ei[i] - DE_h - E0)
+            E_num.fill(Ei[i]-Eg)
             energy.extend(E_num)
         np.random.shuffle(energy)
     else:
@@ -1872,13 +1869,12 @@ def transmission_probability(E_paral, E_trans):
     return Tp
 
 
-def plot_electron_distribution(hw, types):
+def plot_electron_distribution(dist_2D, types):
     if types == 1:
-        dist_2D = electron_distribution(hw, 1)
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 5], bins=100, color='b')
-        ax.set_xlim([0, 0.6])
-        ax.set_ylim([0, 2000])
+        # ax.set_xlim([0, 0.6])
+        # ax.set_ylim([0, 2000])
         ax.set_xlabel(r'Energy (eV)', fontsize=16)
         ax.set_ylabel(r'Counts (No.)', fontsize=16)
         ax.tick_params('both', direction='in', labelsize=14)
@@ -1886,7 +1882,6 @@ def plot_electron_distribution(hw, types):
         plt.savefig('energy_distribution.pdf', format='pdf')
         plt.show()
     elif types == 2:
-        dist_2D = electron_distribution(hw, 2)
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 0], bins=200, color='b')
         ax.set_xlim([0, 2000])
@@ -2111,10 +2106,12 @@ def main(opt):
     if opt == 1:  # for test
         dist_2D = electron_distribution(hw_test, 3)
         print('excited electron ratio: ', len(dist_2D) / Ni)
+        # plot_electron_distribution(dist_2D, 1)
 
         surface_2D, back_2D, trap_2D, dist_2D, time_data = \
             electron_transport(dist_2D, 2)
         print('surface electron ratio: ', len(surface_2D) / Ni)
+        plot_electron_distribution(surface_2D, 1)
 
         emiss_2D, surf_trap = surface_electron_transmission(
             surface_2D, func_tp)
@@ -2139,9 +2136,9 @@ def main(opt):
                 electron_transport(dist_2D, 2)
             print('surface electron ratio: ', len(surface_2D) / Ni)
 
-            # emiss_2D, surf_trap = electron_emitting(surface_2D)
-            emiss_2D, surf_trap = surface_electron_transmission(
-                surface_2D, func_tp)
+            emiss_2D, surf_trap = electron_emitting(surface_2D)
+            #emiss_2D, surf_trap = surface_electron_transmission(
+            #    surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
             TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
@@ -2157,7 +2154,7 @@ def main(opt):
         plot_QE(filename, data)
         compare_data(filename, data)
     elif opt == 3:
-        plot_electron_distribution(hw_test, 1)
+        plot_electron_distribution(electron_distribution(hw_test, 2), 1)
         # plot_scattering_rate(2)
         # plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
@@ -2167,4 +2164,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(3)
