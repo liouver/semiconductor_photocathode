@@ -51,7 +51,8 @@ Eg = 1.519 - 0.54 * 10**(-3) * T**2 / (T + 204)  # eV, bandgap
 # Tiwari, S, Appl. Phys. Lett. 56, 6 (1990) 563-565. (experiment data)
 # Eg = Eg - 2 * 10**(-11) * np.sqrt(N_A * 1e-6)
 DEg = 3 * ec / 16 / pi / eps * np.sqrt(ec**2 * N_A / eps / kB / T)
-# Eg = Eg - DEg
+Eg = Eg - DEg
+Eg = float('%.2f' % Eg)
 DE = 0.34  # eV, split-off energy gap
 # E_B = Eg / 3  # only for NA = 10**19 cm**-3
 EB_data = np.genfromtxt('GaAs_Band_Bending.csv', delimiter=',')
@@ -125,26 +126,25 @@ def photon_to_electron(hw):
     Given photon energy, return excited electron energy. '''
     # nonparabolicity factor, 1/eV
     # alpha_T = 0.58 + (T - 77) * (0.61 - 0.58) / (300 - 77)
-    Ei = random.uniform(Eg, hw - 0.01)
-    Ei = hw
+    Ei = random.uniform(Eg, hw)
     if Ei >= Eg + DE:
         x = random.randint(1, 6)
         if x in [1, 2, 3]:  # heavy hole
-            E1 = hw - Eg - DE
+            E1 = Ei - Eg
             Gamma = 1 + m_hh / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_hh / m_T)
             E_e = E1 - DE_h
         elif x == 4:  # light hole
-            E1 = hw - Eg - DE
+            E1 = Ei - Eg
             Gamma = 1 + m_lh / m_e + 2 * alpha_L * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_L * E1 * (1 + alpha_L * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_lh / m_T)
             E_e = E1 - DE_h
         elif x in [5, 6]:  # split-off band
-            E1 = hw - Eg - DE
+            E1 = Ei - Eg - DE
             Gamma = 1 + m_so / m_e + 2 * alpha_X * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_X * E1 * (1 + alpha_X * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
@@ -153,14 +153,14 @@ def photon_to_electron(hw):
     elif Eg <= Ei < Eg + DE:
         x = random.randint(1, 4)
         if x in [1, 2, 3]:  # heavy hole
-            E1 = hw - Eg
+            E1 = Ei - Eg
             Gamma = 1 + m_hh / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
             # DE_h = E1 / (1 + m_hh / m_T)
             E_e = E1 - DE_h
         elif x == 4:  # light hole
-            E1 = hw - Eg
+            E1 = Ei - Eg
             Gamma = 1 + m_lh / m_e + 2 * alpha_L * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_L * E1 * (1 + alpha_L * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
@@ -168,6 +168,7 @@ def photon_to_electron(hw):
             E_e = E1 - DE_h
     else:
         E_e = 0.002
+        E1 = 0.002
     # print(DE_h, E_e)
     return E_e
 
@@ -185,18 +186,21 @@ def electron_distribution(hw, types):
         energy = np.array(energy)
     elif types == 2:  # use density of state from reference
         DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
-        func1 = interp1d(DOS[:, 0], DOS[:, 2])
-        
+        func1 = interp1d(DOS[:, 0], DOS[:, 1])
+        '''
         fig, ax = plt.subplots()
-        e = np.linspace(-2.5, 2.5, 100)
+        e = np.linspace(-2.5, 2.8, 531)
         ax.plot(e, func1(e))
-        plt.show()
+        #data = np.vstack([e, func1(e)]).T
+        #np.savetxt('func_DOS.csv', data, delimiter=',', fmt='%.6f')
+        plt.savefig('DOS.pdf', format='pdf')
+        plt.show()'''
         E0 = Eg
         norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
                                    limit=10000)
-        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))
+        Ei = np.linspace(E0, hw, int((hw - E0) / 0.00577))
         for i in range(len(Ei)):
-            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.001 / norm
+            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.00577 / norm
             E_num = np.empty(int(num))
             E_num.fill(Ei[i] - Eg)
             energy.extend(E_num)
@@ -243,21 +247,6 @@ def electron_distribution(hw, types):
     vz = velocity * np.cos(theta)
     vy = velocity * np.sin(theta) * np.sin(phi)
     distribution_2D = np.vstack((z_pos, y_pos, vz, vy, velocity, energy)).T
-
-    '''
-    distribution_2D = []
-    for i in range(len(z_pos)):
-        # initial angle between the projection on XY surface and y axis
-        phi = random.uniform(0, 2 * pi)
-        # initial angle between the direction and z axis
-        theta = random.uniform(0, 2 * pi)
-        # y_pos = random.uniform(-1 * 10**6, 1 * 10**6)
-        y_pos = random.gauss(0, 0.25 * 10**6)
-        velocity = np.sqrt(2 * np.abs(energy[i]) * ec / m_T) * 10**9  # nm/s
-        vz = velocity * np.cos(theta)
-        vy = velocity * np.sin(theta) * np.cos(phi)
-        distribution_2D.append([z_pos[i], y_pos, vz, vy, velocity, energy[i]])
-    distribution_2D = np.array(distribution_2D)  # ([z, y, vz, vy, v, E])'''
     return distribution_2D
 
 
@@ -1872,21 +1861,21 @@ def transmission_probability(E_paral, E_trans):
 def plot_electron_distribution(dist_2D, types):
     if types == 1:
         fig, ax = plt.subplots()
-        ax.hist(dist_2D[:, 5], bins=100, color='b')
+        ax.hist(dist_2D[:, 5], bins=100, color='k')
         # ax.set_xlim([0, 0.6])
         # ax.set_ylim([0, 2000])
         ax.set_xlabel(r'Energy (eV)', fontsize=16)
-        ax.set_ylabel(r'Counts (No.)', fontsize=16)
+        ax.set_ylabel(r'Counts (arb. units)', fontsize=16)
         ax.tick_params('both', direction='in', labelsize=14)
         plt.tight_layout()
         plt.savefig('energy_distribution.pdf', format='pdf')
         plt.show()
     elif types == 2:
         fig, ax = plt.subplots()
-        ax.hist(dist_2D[:, 0], bins=200, color='b')
+        ax.hist(dist_2D[:, 0], bins=200, color='k')
         ax.set_xlim([0, 2000])
         ax.set_xlabel(r'Depth (nm)', fontsize=16)
-        ax.set_ylabel(r'Counts (No.)', fontsize=16)
+        ax.set_ylabel(r'Counts (arb. units)', fontsize=16)
         ax.tick_params('both', direction='in', labelsize=14)
         plt.tight_layout()
         plt.savefig('posization_distribution.pdf', format='pdf')
@@ -2154,7 +2143,7 @@ def main(opt):
         plot_QE(filename, data)
         compare_data(filename, data)
     elif opt == 3:
-        plot_electron_distribution(electron_distribution(hw_test, 2), 1)
+        plot_electron_distribution(electron_distribution(hw_test, 2), 2)
         # plot_scattering_rate(2)
         # plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
