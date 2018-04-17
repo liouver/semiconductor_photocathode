@@ -198,9 +198,9 @@ def electron_distribution(hw, types):
         E0 = Eg
         norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
                                    limit=10000)
-        Ei = np.linspace(E0, hw, int((hw - E0) / 0.00577))
+        Ei = np.linspace(E0, hw, int((hw - E0) / 0.005))
         for i in range(len(Ei)):
-            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.00577 / norm
+            num = 1.5 * Ni * func1(Ei[i]) * func1(Ei[i] - hw) * 0.005 / norm
             E_num = np.empty(int(num))
             E_num.fill(Ei[i] - Eg)
             energy.extend(E_num)
@@ -209,19 +209,20 @@ def electron_distribution(hw, types):
         DOS = np.genfromtxt('GaAs_DOS.csv', delimiter=',')
         func1 = interp1d(DOS[:, 0], DOS[:, 1])
         E0 = Eg
-        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))       
+        Ei = np.linspace(E0, hw, int((hw - E0) / 0.001))
         for i in range(len(Ei)):
             E1 = Ei[i] - Eg
             Gamma = 1 + m_h / m_e + 2 * alpha_T * E1
             DE_h = (1 - np.sqrt(1 - 4 * alpha_T * E1 * (1 + alpha_T * E1) /
                                 Gamma**2)) / (2 * alpha_T) * Gamma
-            norm, err = integrate.quad(lambda e: func1(e + DE_h - hw) * func1(e),\
-                                         E0, hw - DE_h, limit=10000)
+            norm, err = integrate.quad(lambda e: func1(e + DE_h - hw) *
+                                       func1(e),
+                                       E0, hw - DE_h, limit=10000)
             num = 1.5 * Ni * func1(Ei[i]) * \
                 func1(Ei[i] + DE_h - hw) * 0.001 / norm
             # print(Ei[i], DE_h, num)
             E_num = np.empty(int(num))
-            E_num.fill(Ei[i]-Eg)
+            E_num.fill(Ei[i] - Eg)
             energy.extend(E_num)
         np.random.shuffle(energy)
     else:
@@ -2125,12 +2126,12 @@ def main(opt):
     if opt == 1:  # for test
         dist_2D = electron_distribution(hw_test, 2)
         print('excited electron ratio: ', len(dist_2D) / Ni)
-        # plot_electron_distribution(dist_2D, 1)
+        plot_electron_distribution(dist_2D, 1)
 
         surface_2D, back_2D, trap_2D, dist_2D, time_data = \
             electron_transport(dist_2D, 2)
         print('surface electron ratio: ', len(surface_2D) / Ni)
-        # plot_electron_distribution(surface_2D, 1)
+        plot_electron_distribution(surface_2D, 1)
 
         emiss_2D, surf_trap = surface_electron_transmission(
             surface_2D, func_tp)
@@ -2156,7 +2157,7 @@ def main(opt):
             print('surface electron ratio: ', len(surface_2D) / Ni)
 
             emiss_2D, surf_trap = electron_emitting(surface_2D)
-            #emiss_2D, surf_trap = surface_electron_transmission(
+            # emiss_2D, surf_trap = surface_electron_transmission(
             #    surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
