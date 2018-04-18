@@ -108,8 +108,21 @@ phonon_X_X = 0.0299
 
 
 def surface_reflection(hw):
-    data = np.genfromtxt('GaAs_surface_reflection.csv', delimiter=',')
-    func = interp1d(data[:, 0], data[:, 1])
+    data = np.genfromtxt('GaAs_optical_constant.txt', delimiter=',')
+    func = interp1d(data[:, 0], data[:, 2])
+    '''
+    fig, ax = plt.subplots()
+    ax.plot(data[:, 0], data[:, 2])
+    ax.set_xlabel('Photon energy (eV)', fontsize=16)
+    ax.set_ylabel('Reflectivity (%)', fontsize=16)
+    ax.set_xlim([1.25, 2.5])
+    ax.set_xticks(np.arange(1.25, 2.51, 0.25))
+    ax.set_ylim([0.3, 0.42])
+    ax.tick_params('both', direction='in', labelsize=14)
+    plt.tight_layout()
+    plt.savefig('surface_reflectivity.pdf', format='pdf')
+    plt.show()
+    '''
     return func(hw)
 
 
@@ -209,8 +222,22 @@ def electron_distribution(hw, types):
         np.random.shuffle(energy)
     else:
         print('Wrong photon-to-electron type')
-    absorb_data = np.genfromtxt('absorp_coeff_GaAs.txt', delimiter=',')
+    absorb_data = np.genfromtxt('GaAs_optical_constant.txt', delimiter=',')
     func2 = interp1d(absorb_data[:, 0], absorb_data[:, 1])
+    '''
+    fig, ax = plt.subplots()
+    ax.plot(absorb_data[:, 0], absorb_data[:, 1])
+    ax.set_xlabel(r'Photon energy (eV)', fontsize=16)
+    ax.set_ylabel(r'Absorption coefficient ($cm^{-1}$)', fontsize=16)
+    ax.set_xlim([1.25, 2.5])
+    ax.set_xticks(np.arange(1.25, 2.51, 0.25))
+    ax.set_ylim([0, 1.4e5])
+    ax.ticklabel_format(axis='y',style='sci',scilimits=(-2,2))
+    ax.tick_params('both', direction='in', labelsize=14)
+    plt.tight_layout()
+    plt.savefig('absorption_coefficient.pdf', format='pdf')
+    plt.show()
+    '''
     alpha = func2(hw) * 10**-7  # 1/nm,  absorption coefficient
     # photon distribution in GaAs (exp distribution random variables)
     z_exp = expon.rvs(loc=0, scale=1 / alpha, size=Ni)
@@ -248,7 +275,7 @@ def impurity_scattering(energy, types):
         # T_e = np.mean(energy) * ec / kB
         Bs = np.sqrt(n_i * ec**2 / eps / kB / T_i)  # 1/m
         b = 4 * k_e**2 / Bs**2
-        # print(b**2 / (1 + b), np.log(1 + b) - b / (1 + b))
+        # print(b**2 / (1 + b), np.log(1 + b) - b / (1 + b) * 2)
         # e-impurity scattering rate, (C. Jacoboni, RMP 55,645, 1983)
         Rate_ei = n_i * ec**4 * (1 + 2 * alpha_T * E0) / 32 / np.sqrt(2) / \
             pi / eps**2 / np.sqrt(m_T) / (gamma_E * ec)**1.5 * b**2 / (1 + b)
@@ -1233,7 +1260,8 @@ def electron_transport(distribution_2D, types):
                               len(surface_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
             # print('surface:', len(surface_2D), 'trap:', len(trap_2D),
-            #       'back:', len(back_2D))
+            #      'back:', len(back_2D), 
+            #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)))
             # print(np.mean(dist_2D[:, 5]), len(dist_2D))
             if (len(dist_2D)) <= 10:
                 break
@@ -1350,7 +1378,7 @@ def transmission_function(E_paral, E_trans):
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
     V = [0.0, 0.25]
-    width = 8e-10  # m, width of barrier
+    width = 1e-10  # m, width of barrier
     num = len(V)
     L = width / (num - 1)
     Tp = 1
@@ -1661,7 +1689,7 @@ def plot_surface_emission_probability(E_paral, Tp, func_tp):
     plt.show()
 
 
-def plot_electron_distribution(dist_2D, types):
+def plot_electron_distribution(filename,dist_2D, types):
     if types == 1:
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 5], bins=100, color='k')
@@ -1671,7 +1699,7 @@ def plot_electron_distribution(dist_2D, types):
         ax.set_ylabel(r'Counts (arb. units)', fontsize=16)
         ax.tick_params('both', direction='in', labelsize=14)
         plt.tight_layout()
-        plt.savefig('energy_distribution.pdf', format='pdf')
+        plt.savefig(filename + 'energy_distribution.pdf', format='pdf')
         plt.show()
     elif types == 2:
         fig, ax = plt.subplots()
@@ -1681,7 +1709,7 @@ def plot_electron_distribution(dist_2D, types):
         ax.set_ylabel(r'Counts (arb. units)', fontsize=16)
         ax.tick_params('both', direction='in', labelsize=14)
         plt.tight_layout()
-        plt.savefig('posization_distribution.pdf', format='pdf')
+        plt.savefig(filename + 'posization_distribution.pdf', format='pdf')
         plt.show()
     else:
         print('Wrong types')
@@ -1690,7 +1718,7 @@ def plot_electron_distribution(dist_2D, types):
 def main(opt):
     hw_start = Eg + 0.01  # eV
     hw_end = 2.5  # eV
-    hw_step = 0.2  # eV
+    hw_step = 0.05  # eV
     hw_test = 2.0  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
@@ -1700,24 +1728,24 @@ def main(opt):
     if opt == 1:  # for test
         dist_2D = electron_distribution(hw_test, 2)
         print('excited electron ratio: ', len(dist_2D) / Ni)
-        # plot_electron_distribution(dist_2D, 1)
+        #plot_electron_distribution('initial', dist_2D, 1)
 
         surface_2D, back_2D, trap_2D, dist_2D, time_data = \
             electron_transport(dist_2D, 1)
         print('surface electron ratio: ', len(surface_2D) / Ni)
-        plot_electron_distribution(surface_2D, 1)
+        plot_electron_distribution('surface_' + str(hw_test), surface_2D, 1)
 
         emiss_2D, surf_trap = surface_electron_transmission(
             surface_2D, func_tp)
         print('emission ratio:', len(emiss_2D) / len(surface_2D))
         print('QE (%): ', 100.0 * len(emiss_2D) /
               Ni * (1 - surface_reflection(hw_test)))
-
+        '''
         emiss_2D, surf_trap = electron_emitting(surface_2D)
         print('emission ratio:', len(emiss_2D) / len(surface_2D))
         print('QE (%): ', 100.0 * len(emiss_2D) /
               Ni * (1 - surface_reflection(hw_test)))
-
+        '''
         filename = 'time_evoluation_' + str(hw_test)
         plot_time_data(filename, time_data)
 
@@ -1730,9 +1758,9 @@ def main(opt):
                 electron_transport(dist_2D, 1)
             print('surface electron ratio: ', len(surface_2D) / Ni)
 
-            emiss_2D, surf_trap = electron_emitting(surface_2D)
-            # emiss_2D, surf_trap = surface_electron_transmission(
-            #    surface_2D, func_tp)
+            # emiss_2D, surf_trap = electron_emitting(surface_2D)
+            emiss_2D, surf_trap = surface_electron_transmission(
+                surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
             TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
@@ -1748,8 +1776,8 @@ def main(opt):
         plot_QE(filename, data)
         compare_data(filename, data)
     elif opt == 3:
-        plot_electron_distribution(electron_distribution(hw_test, 2), 1)
-        # plot_scattering_rate(3)
+        # plot_electron_distribution('', electron_distribution(hw_test, 2), 2)
+        plot_scattering_rate(1)
         # plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
         print('Wrong run option')
@@ -1758,4 +1786,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(3)
