@@ -895,7 +895,7 @@ def electron_transport(distribution_2D, types):
         # hole temperature T_h = T = 298 K
         hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), len(dist_2D))
         hole_energy = m_h * hole_velocity**2 / 2 / ec
-        time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3, 0, 0,
+        time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3,
                           0, len(dist_2D), 0, 0])
         while t < total_time:
             # electrons in Gamma valley begin scattering
@@ -1234,11 +1234,11 @@ def electron_transport(distribution_2D, types):
                 trap_2D.extend(td.tolist())
                 surface_2D.extend(fd.tolist())
                 if len(dist_L) > 0:
-                    energy_L = np.mean(dist_L[:, 5])
+                    energy_L = dist_L[:, 5]
                 else:
-                    energy_L = 0
+                    energy_L = np.array([])
             else:
-                energy_L = 0
+                energy_L = np.array([])
 
             # -------- filtting electrons in X valley --------
             if len(dist_X) > 0:
@@ -1248,15 +1248,14 @@ def electron_transport(distribution_2D, types):
                 trap_2D.extend(td.tolist())
                 surface_2D.extend(fd.tolist())
                 if len(dist_X) > 0:
-                    energy_X = np.mean(dist_X[:, 5])
+                    energy_X = dist_X[:, 5]
                 else:
-                    energy_X = 0
+                    energy_X = np.array([])
             else:
-                energy_X = 0
+                energy_X = np.array([])
             # print('after:', np.mean(dist_2D[:, 5]))
-            time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3,
-                              energy_L * 10**3,
-                              energy_X * 10**3,
+            total_energy = np.concatenate((dist_2D[:, 5], energy_L, energy_X), axis=0)
+            time_data.append([t * 10**12, np.mean(total_energy) * 10**3,
                               len(surface_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
             # print('surface:', len(surface_2D), 'trap:', len(trap_2D),
@@ -1319,40 +1318,14 @@ def filter(dist_2D):
     return back_dist, front_dist, trap_dist, rest_dist
 
 
-def electron_emitting(surface_2D):
-    ''' two conidtion should be matched before emitting:
-    1. E_out = E_e - E_A + E_sch > 0
-    2. P_out > P_out_T = P_in_T
-    '''
-    surface_trap = []
-    # E_trans = 0.5 * (m_T * surface_2D[:, 3])**2 / m_e
-    match_ind = surface_2D[:, 5] >= (E_A - E_sch)
-    match_E = surface_2D[match_ind, :]
-    surface_trap.extend(surface_2D[(~match_ind), :].tolist())
-    phi = np.random.uniform(0, two_pi, len(match_E))
-    # phi = np.random.uniform(0, 2 * pi, (len(match_E), 1))
-    # match_E = np.append(match_E, phi, 1)
-
-    match_E[:, 5] = match_E[:, 5] - E_A + E_sch
-    match_E[:, 4] = np.sqrt(2 * match_E[:, 5] / m_e) * \
-        c * 10**9 * np.cos(phi)
-    match = m_e * np.abs(match_E[:, 4]) >= m_T * np.abs(match_E[:, 3])
-    emission_2D = match_E[match, :]
-    # emission_2D[:, 2] = np.sqrt(emission_2D[:, 4]**2 - emission_2D[:, 3]**2)
-    surface_trap.extend(match_E[(~match), :].tolist())
-    emission_2D = match_E
-    surface_trap = np.array(surface_trap)
-    return emission_2D, surface_trap
-
-
 def surface_electron_transmission(surface_2D, func_tp):
     surface_trap = []
     P_tp = []
     # surface_2D[:, 5] = surface_2D[:, 5] + E_B
     Num = len(surface_2D)
     phi = two_pi * np.random.uniform(0, 1, Num)
-    E_trans = np.abs(surface_2D[:, 5] * np.sin(phi))
-    E_paral = np.abs(surface_2D[:, 5] * np.cos(phi))
+    E_trans = np.abs(surface_2D[:, 5] * np.sin(phi)**2)
+    E_paral = np.abs(surface_2D[:, 5] * np.cos(phi)**2)
     # P_tp1 = func_tp(surface_2D[:, 5], 0.0)
     # print(P_tp1)
     for i in range(Num):
@@ -1363,24 +1336,40 @@ def surface_electron_transmission(surface_2D, func_tp):
     surface_trap.extend(surface_2D[(~match_ind), :].tolist())
     emission_2D = surface_2D[match_ind, :]
     surface_trap = np.array(surface_trap)
-    '''
-    fig1, ax1 = plt.subplots()
-    ax1.plot(E_paral, P_tp, '.')
-    fig2, ax2 = plt.subplots()
-    ax2.hist(surface_2D[:, 5], bins=100)
-    plt.show()'''
     return emission_2D, surface_trap
 
 
-def transmission_function(E_paral, E_trans):
+def transmission_function1(E_paral, E_trans):
     # k_trans = np.sqrt(2 * m_T * E_trans * ec) / h_
+    '''
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
-    V = [0.0, 0.25]
-    width = 1e-10  # m, width of barrier
+    # V = [0.0, 0.1]
+    width = 8e-10  # m, width of barrier
     num = len(V)
     L = width / (num - 1)
+    '''
+    w1 = 10e-10
+    w2 = 200e-10
+    num = 40
+    L = w1 / num
+    L2 = w2 / num
+    x1 = np.arange(0, w1, L)
+    x2 = np.arange(w1, w2, L2)
+    Q = ec / 16 / pi / eps0 * (12.85 - 1) / (12.85 + 1)
+    V0 = 0.1
+    F = (V0 - E_A) / w1
+    V1 = V0 - F * x1
+    V2 = V0 - F * w1 - Q / x2
+    x = np.concatenate((x1, x2), axis=0)
+    V = np.concatenate((V1, V2), axis=0)
+    
+    fig, ax = plt.subplots()
+    ax.plot(x, V)
+    plt.savefig('surface_barrier.pdf', format='pdf')
+    plt.show()
+    
     Tp = 1
     E_in_par = E_paral + E_trans - E_trans * m_T / m_e
     E_out_par = E_paral + E_trans - E_trans * m_T / m_e - E_A
@@ -1415,20 +1404,49 @@ def transmission_function(E_paral, E_trans):
     return Tp
 
 
-def transmission_function1(E_paral, E_trans):
+# transmission_function1(1, 1)
+
+
+def transmission_function(E_paral, E_trans):
+    
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
-    # V = np.array([0.0, 0.25])
+    V = np.array([0.28]*100)
     # V = V + E_B
     width = 8e-10  # m, width of barrier
-    num = len(V)
-    L = width / (num - 1)
+    num = 100
+    L = width / num
+    '''
+    width = 1.5e-10
+    num = 40
+    L = width / num
+    x = np.arange(0, width, L) + L
+    Q = 0.36 * (12.85 - 1) / (12.85 + 1)
+    F = (4 - E_A) / width
+    V = 0.3 - F * x'''
+    '''
+    w1 = 10e-10
+    w2 = 200e-10
+    num = 40
+    L = w1 / num
+    L2 = w2 / num
+    x1 = np.arange(0, w1, L)
+    x2 = np.arange(w1, w2, L2)
+    Q = ec / 16 / pi / eps0 * (12.85 - 1) / (12.85 + 1)
+    V0 = 1
+    F = (V0 - E_A) / w1
+    V1 = V0 - F * x1
+    V2 = V0 - F * w1 - Q / x2
+    x = np.concatenate((x1, x2), axis=0)
+    V = np.concatenate((V1, V2), axis=0)
+    '''
     Tp = np.mat([[1, 0], [0, 1]])
     E_in_par = E_paral + 0j
     E_out_par = E_paral + E_trans - E_trans * m_T / m_e + 0j
     k_in = (np.sqrt(2 * m_T * (E_in_par + 0j) * ec) / h_)
     k_out = (np.sqrt(2 * m_e * (E_out_par + 0j) * ec) / h_)
+    '''
     if k_in == 0:
         P = 0
     else:
@@ -1437,8 +1455,8 @@ def transmission_function1(E_paral, E_trans):
         p21 = 0.5 * (1 - m_T * k_out / k_in / m_e)  # * np.exp(-1j * k_in * L)
         p22 = 0.5 * (1 + m_T * k_out / k_in / m_e)  # * np.exp(-1j * k_in * L)
         P = np.mat([[p11, p12], [p21, p22]])
-    Tp = Tp * P
-
+    Tp = Tp * P'''
+    # Tp = Tp * m_T  / m_e * np.abs(k_out / k_in)
     for k in range(num - 2):
         i = k + 1
         k1 = (np.sqrt(2 * m_e * (E_out_par - V[i] + 0j) * ec) / h_)
@@ -1507,26 +1525,23 @@ def plot_QE(filename, data):
 def plot_time_data(filename, time_data):
     np.savetxt(filename + '.csv', time_data, delimiter=',', fmt='%.6f')
     fig1, ax1 = plt.subplots()
-    ax1.plot(time_data[:, 0], time_data[:, 1], 'b',
-             time_data[:, 0], time_data[:, 2], 'k',
-             time_data[:, 0], time_data[:, 3], 'g')
+    l1 = ax1.plot(time_data[:, 0], time_data[:, 1], 'bp', label='Electron energy')
     ax1.set_xlabel('Time (ps)', fontsize=14)
     ax1.set_ylabel('Energy (meV)', fontsize=14, color='b')
     ax1.tick_params('y', color='b')
     ax1.tick_params('both', direction='in', labelsize=12)
-    ax1.legend(['Gamma energy', 'L energy', 'X energy'],
-               loc='best', frameon=False, fontsize=12)
 
     ax2 = ax1.twinx()
-    ax2.semilogy(time_data[:, 0], time_data[:, 4], 'r*',
-                 time_data[:, 0], time_data[:, 5], 'c.',
-                 time_data[:, 0], time_data[:, 6], 'ys',
-                 time_data[:, 0], time_data[:, 7], 'mo')
-    ax2.set_ylabel('Counts', fontsize=14)
+    l2 = ax2.semilogy(time_data[:, 0], time_data[:, 2], 'r*', label='Surface')
+    l3 = ax2.semilogy(time_data[:, 0], time_data[:, 3], 'c.', label='Gamma')
+    l4 = ax2.semilogy(time_data[:, 0], time_data[:, 4], 'ys', label='L')
+    l5 = ax2.semilogy(time_data[:, 0], time_data[:, 5], 'mo', label='X')
+    ax2.set_ylabel('Counts (abs. units)', fontsize=14)
     ax2.tick_params('y', color='r')
     ax1.tick_params('both', direction='in', labelsize=12)
-    ax2.legend(['Surface counts', 'Gamma counts', 'L counts', 'X counts'],
-               loc='best', frameon=False, fontsize=12)
+    ln = l1 + l2 + l3 + l4 + l5
+    labs = [l.get_label() for l in ln]
+    ax1.legend(ln, labs, loc='best', frameon=False, fontsize=12)
     fig1.tight_layout()
     plt.savefig(filename + '.pdf', format='pdf')
     plt.show()
@@ -1719,7 +1734,7 @@ def main(opt):
     hw_start = Eg + 0.01  # eV
     hw_end = 2.5  # eV
     hw_step = 0.05  # eV
-    hw_test = 2.0  # eV
+    hw_test = 1.5  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
@@ -1746,6 +1761,7 @@ def main(opt):
         print('QE (%): ', 100.0 * len(emiss_2D) /
               Ni * (1 - surface_reflection(hw_test)))
         '''
+        plot_electron_distribution('emission_' + str(hw_test), emiss_2D, 1)
         filename = 'time_evoluation_' + str(hw_test)
         plot_time_data(filename, time_data)
 
@@ -1777,8 +1793,8 @@ def main(opt):
         compare_data(filename, data)
     elif opt == 3:
         # plot_electron_distribution('', electron_distribution(hw_test, 2), 2)
-        plot_scattering_rate(1)
-        # plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
+        # plot_scattering_rate(1)
+        plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
         print('Wrong run option')
 
@@ -1786,4 +1802,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(3)
+    main(1)
