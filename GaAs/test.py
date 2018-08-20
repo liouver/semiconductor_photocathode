@@ -415,14 +415,14 @@ def filter(dist_2D, surface, thick, threshold_value):
 
 
 def electron_emitting(surface_2D, E_A, E_sch):
-    ''' two conidtion should be matched before emitting:
-    1. E_e >= E_A + E_sch
+    ''' conidtions should be matched before emitting:
+    1. E_out = E_e - E_A + E_sch > 0
     2. P_out > P_out_T = P_in_T
     '''
     surface_trap = []
-    match = surface_2D[:, 5] >= (E_A + E_sch)
-    match_E = surface_2D[match, :]
-    surface_trap.extend(surface_2D[(~match), :].tolist())
+    match_ind = surface_2D[:, 5] >= (E_A - E_sch)
+    match_E = surface_2D[match_ind, :]
+    surface_trap.extend(surface_2D[(~match_ind), :].tolist())
     match_E = match_E - E_A - E_sch
 
     phi = np.random.uniform(0, 2 * pi, (len(match_E), 1))

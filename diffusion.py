@@ -71,11 +71,11 @@ def MBdist(n, e_photon, thick):  # n: particle number, loct: start point(x-x0), 
     p2D = []
     wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
     pens = expon.rvs(loc=0, scale=wl, size=n)
-    penss = filter(lambda x: x <= thick, pens)
+    penss = [x for x in pens if x <= thick]
     params_exp = expon.fit(pens, floc=0)
     i = 0
 
-    for n in range(len(penss)):
+    for i in range(len(penss)):
         phi = random.uniform(0, 2 * math.pi)  # initial angular
         # initial y direction position
         poy = random.uniform(-1 * 10**6, 1 * 10**6)
@@ -100,7 +100,7 @@ def DosDist(n, e_photon, thick, data):
     i = 0
     while i < n1:
         # using n instead of n1
-        n3 = round(n * f(energy[i] - e_photon) * f(energy[i]) * 0.01 / norm)
+        n3 = int(n * f(energy[i] - e_photon) * f(energy[i]) * 0.01 / norm)
         num_energy.append(n3)
         ener_array = np.empty(n3)
         ener_array.fill(energy[i])
@@ -118,7 +118,7 @@ def DosDist(n, e_photon, thick, data):
     p2D = []
     wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
     pens = expon.rvs(loc=0, scale=wl, size=n)
-    penss = filter(lambda x: x <= thick, pens)
+    penss = [x for x in pens if x <= thick]
     params_exp = expon.fit(pens, floc=0)
 
     i = 0
@@ -186,7 +186,6 @@ def diff(stept, endT, p2Di, mfp_ps, bounde, bounda, types):
         p2De = np.array(p2De)
         print(p2De)
         p2De[:, 5] = np.maximum(p2De[:, 5], 0)
-
         print(p2De, bounde, bounda)
 
         p2De[:, 0] = np.clip(p2De[:, 0], bounde, bounda)

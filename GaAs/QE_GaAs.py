@@ -1,8 +1,6 @@
 '''
-Created on Feb 5, 2015
-
-@author: E. Wang
-
+Created on Feb 5, 2015 by E.Wange
+Modified on Jan, 2018 by W.Liu
 |----------------------------|
 |                            |
 |                            |
@@ -21,7 +19,8 @@ The scale parameter is equal to scale = 1.0 / lambda.
 rvs(loc=0, scale=1, size=1)
 }
 {
-A special case of a chi distribution, with df = 3, loc = 0.0, and given scale = a, where a is the parameter used in the Mathworld description [R240].
+A special case of a chi distribution, with df = 3, loc = 0.0, and given
+scale = a, where a is the parameter used in the Mathworld description [R240].
 
 The probability density function for maxwell is:
 
@@ -31,10 +30,14 @@ rvs(loc=0, scale=1, size=1)    Random variates.
 pdf(x, loc=0, scale=1)    Probability density function.
 }
 version v0: basic version, only e-p scattering
-version v1: add photon energy scan function. could generate QE-Emittance, electrons loss factor
-version v2, add e-h scattering function, add e-e scattering opinion, add EA scan
-version v3, add e-e scattering function, ea scan for both emittance and electron loss. save figures. add green laser mark on scanned figure.
-version v4, use a mfp/5 as step, reduce the step length, fix the first step too large issue
+version v1: add photon energy scan function. could generate QE-Emittance,
+electrons loss factor
+version v2, add e-h scattering function, add e-e scattering opinion,
+add EA scan
+version v3, add e-e scattering function, ea scan for both emittance and
+electron loss. save figures. add green laser mark on scanned figure.
+version v4, use a mfp/5 as step, reduce the step length, fix the first step
+too large issue
 in v4plus, consider the e-p scatter may gain the energy
 '''
 
@@ -59,12 +62,14 @@ def Max_boltE(ene,le):  ## Maxwell b distribution
 ma = 9.11 * 10**-31  # electron mess,kg
 eff = 0.1176
 me = eff * ma  # effective electron mess,kg
-bandgap = 1.61  # 1.23（DOS12） or 1.64(DOS16) or 1.6(DOS160)
-
 ec = 1.6 * (10**(-19))
+bandgap = 1.42
+electron_affinity = -0.01  # eV
 
 
-def MBdist(n, e_photon, thick):  # n: particle number, loct: start point(x-x0), scale: sigma, wl: wavelength,thick: thickness of the cathode
+def MBdist(n, e_photon, thick):
+    #  n: particle number, loct: start point(x-x0), scale: sigma,
+    #  wl: wavelength,thick: thickness of the cathode
     assert e_photon > bandgap
     if e_photon - bandgap - 0.8 <= 0:
         scale = e_photon - bandgap
@@ -77,7 +82,20 @@ def MBdist(n, e_photon, thick):  # n: particle number, loct: start point(x-x0), 
     params = maxwell.fit(data, floc=0)
     data_v = np.sqrt(2 * data_ene * ec / me) * 10**9
     p2D = []
-    wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
+    # wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
+    file = open('absorp_coeff_GaAs.txt')
+    lines = file.readlines()
+    file.close()
+    photon_energy = []
+    absorption_coefficient = []
+    for line in lines:
+        line = line.strip()
+        line = line.split()
+        photon_energy.append(float(line[0]))
+        absorption_coefficient.append(float(line[1]))
+    func = interp1d(photon_energy, absorption_coefficient)
+    wl = func(e_photon)  # absorption coefficient
+
     pens = expon.rvs(loc=0, scale=wl, size=n)
     penss = filter(lambda x: x <= thick, pens)
     params_exp = expon.fit(pens, floc=0)
@@ -94,44 +112,61 @@ def MBdist(n, e_photon, thick):  # n: particle number, loct: start point(x-x0), 
     return params, p2D, penss, params_exp
 
 
-# n, the photon numbers; loct, the postion(z) of the electrons;thick, unit, nm.
+# Density of state distribution
+# n: the photon numbers; loct: the postion(z) of the electrons;
+# thick (nm): thickness of sample;
+# data, data[:,0]: energy, data[:,1]: density of state
 def DosDist(n, e_photon, thick, data):
 
+    global electron_affinity
+    # E0 = bandgap + electron_affinity
+    E0 = 0.6
     f = interp1d(data[:, 0], data[:, 1])
-
-    n1 = int((e_photon - 1) / 0.01)  # change to n
-    energy = np.linspace(1., e_photon, n1)
+    DE = 0.01
+    n1 = int((e_photon - E0) / DE)  # change to n
+    # normalization factor
     norm, err = integrate.quad(lambda e: f(
-        e - e_photon) * f(e), 1, e_photon, limit=10000)
+        e - e_photon) * f(e), E0, e_photon, limit=10000)
 
+    energy = np.linspace(E0, e_photon, n1)
     data_ene = []
-    num_energy = []
     i = 0
     while i < n1:
         # using n instead of n1
-        n3 = round(1.5 * n * f(energy[i] - e_photon)
-                   * f(energy[i]) * 0.01 / norm)
-        num_energy.append(n3)
+        n3 = round(1.5 * n * f(energy[i] - e_photon) *
+                   f(energy[i]) * DE / norm)
         ener_array = np.empty(int(n3))
         ener_array.fill(energy[i])
         data_ene.extend(ener_array)
         i += 1
     np.random.shuffle(data_ene)
-
     '''
     plt.subplot(211)
-    plt.plot(data[:,0],data[:,1])
+    plt.plot(data[:, 0], data[:, 1])
     plt.subplot(212)
-    plt.hist(data_ene,bins=30)
+    plt.hist(data_ene, bins=30)
     plt.show()
     '''
-    p2D = []
-    wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
-    pens = expon.rvs(loc=0, scale=wl, size=n)
+    # wl = ((19.82 - 27.95 * e_photon + 11.15 * e_photon**2) * 10**-3)**-1
+    file = open('absorp_coeff_GaAs.txt')
+    lines = file.readlines()
+    file.close()
+    photon_energy = []
+    absorption_coefficient = []
+    for line in lines:
+        line = line.strip()
+        line = line.split()
+        photon_energy.append(float(line[0]))
+        absorption_coefficient.append(float(line[1]))
+    func = interp1d(photon_energy, absorption_coefficient)
+    alpha = func(e_photon) * 10**-7  # 1/nm
+    # stats.expon.rvs produce an exp distribution random variables
+    # exp(-alpha*x), scale = 1/alpha, size is the total numbers
+    pens = expon.rvs(loc=0, scale=1 / alpha, size=n)
     penss = list(filter(lambda x: x <= thick, pens))
     params_exp = expon.fit(pens, floc=0)
-
-    i = 0
+    # print(len(penss), len(data_ene))
+    p2D = []
     for i in range(len(penss)):
         phi = random.uniform(0, 2 * math.pi)  # initial angular on 2D surface
         # initial angular on perpdiculat face
@@ -139,13 +174,11 @@ def DosDist(n, e_photon, thick, data):
         # initial y direction position, nm
         poy = random.uniform(-1 * 10**6, 1 * 10**6)
         v = np.sqrt(2 * np.abs((data_ene[i] - bandgap)) * ec / me) * 10**9
-        p2D.append([penss[i], poy, v * math.cos(phi) * math.cos(php), v * math.sin(phi)
-                    * math.cos(php), v, np.abs(data_ene[i] - bandgap)])  # p2D: (z,y,vz,vy,v,ene)
-        i += 1
+        p2D.append([penss[i], poy, v * math.cos(phi) * math.cos(php),
+                    v * math.sin(phi) * math.cos(php), v,
+                    np.abs(data_ene[i] - bandgap)])  # p2D: (z,y,vz,vy,v,ene)
     p2D = np.array(p2D)
-
-    # print p2D
-    return params_exp, p2D, penss, params_exp
+    return data_ene, p2D, penss, params_exp
 
 
 def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
@@ -155,8 +188,10 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
     p2D_back = []
 
     if types == 1:
-        tmatix_ns = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [endT, 0, 1, 0, 0, 0], [
-                             0, endT, 0, 1, 0, 0], [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])  # non scattering transistion matrix
+        # non scattering transistion matrix
+        tmatix_ns = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
+                              [endT, 0, 1, 0, 0, 0], [0, endT, 0, 1, 0, 0],
+                              [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
         p2De = np.dot(p2Di, tmatix_ns)
         # p2De[:,0]=np.clip(p2De[:,0],bounde,bounda)
         se, st, sb, p2De = swap(bounde, bounda, 0, p2De)
@@ -174,13 +209,17 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
         p2De[:, 0] = np.clip(p2De[:, 0], bounde, bounda)
 
     elif types == 2:
-        tmatix_diff = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [endT, 0, 1, 0, 0, 0], [
-                               0, endT, 0, 1, 0, 0], [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
+        tmatix_diff = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
+                                [endT, 0, 1, 0, 0, 0], [0, endT, 0, 1, 0, 0],
+                                [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
         t = 0
         for t in range(int(endT / stept)):
             q = random.uniform(0, 2 * math.pi)
-            tmatix_difft = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [stept, 0, 0, 0, 0, 0], [
-                                    0, stept, 0, 0, 0, 0], [0, 0, math.cos(q), math.sin(q), 1, 0], [0, 0, 0, 0, 0, 1]])
+            tmatix_difft = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
+                                     [stept, 0, 0, 0, 0, 0],
+                                     [0, stept, 0, 0, 0, 0],
+                                     [0, 0, math.cos(q), math.sin(q), 1, 0],
+                                     [0, 0, 0, 0, 0, 1]])
             tmatix_diff = np.dot(tmatix_diff, tmatix_difft)
             t += 1
         p2De = np.dot(p2Di, tmatix_diff)
@@ -203,36 +242,39 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
 
         p2De[:, 0] = np.clip(p2De[:, 0], bounde, bounda)
     elif types == 3:
-        # tmatix_i=np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[endT,0,1,0,0,0],[0,endT,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
-        t = 0
-        # p2De=np.dot(p2Di,tmatix_i)
-
         eemfpdata = genfromtxt('K2CsSb_ees.csv', delimiter=',')
-
         eemfp = interp1d(eemfpdata[:, 0], eemfpdata[:, 1])
         p2De = p2Di
         tempres = []
+        t = 0
         while t < endT:
-
-            # random energy loss  2.5 * np.random.randn(2, 4) + 3// sigma *
-            # np.random.randn(...) + mu
             ee = eloss
-            mfp = np.abs((mfp_ps / 3) * np.random.randn() +
-                         mfp_ps)  # random mfp
+            VB_width = 1.5  # eV
+            # random mfp, standard normal distribution
+            #  2.5 * np.random.randn(2, 4) + 3, N(3, 6.25)
+            # sigma * np.random.randn() + mu, N(mu, sigma**2)
+            mfp = np.abs((mfp_ps / 3) * np.random.randn() + mfp_ps)
 
             # 0.2*tau is the step for collision
             stept = mfp / \
                 (np.sqrt(2 * np.mean(p2De[:, 5]) * ec / me) * 10**9) / 5.0
             # print np.mean(p2De[:,5]),'
             # ',np.sqrt(2*np.mean(p2De[:,5])*ec/me),'   ', mfp,'   ', stept
-            tmatix_epsim = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [stept, 0, 1, 0, 0, 0], [
-                                    0, stept, 0, 1, 0, 0], [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
+            tmatix_epsim = np.array([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
+                                     [stept, 0, 1, 0, 0, 0],
+                                     [0, stept, 0, 1, 0, 0],
+                                     [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]])
             p2De = np.dot(p2De, tmatix_epsim)
 
             lossoverall = 0.8  # 1
 
-            ranlist = np.array([ee] * int(len(p2De) * 0.2 * lossoverall) + [-ee] * int(len(p2De) * 0.2 * (1 - lossoverall)) + [
-                               0] * (len(p2De) - int(len(p2De) * 0.2 * lossoverall) - int(len(p2De) * 0.2 * (1 - lossoverall))))
+            ranlist = np.array([ee] * int(len(p2De) * 0.2 * lossoverall) +
+                               [-ee] * int(len(p2De) * 0.2 *
+                                           (1 - lossoverall)) +
+                               [0] * (len(p2De) - int(len(p2De) * 0.2 *
+                                                      lossoverall) -
+                                      int(len(p2De) * 0.2 *
+                                          (1 - lossoverall))))
             np.random.shuffle(ranlist)
             nor_ranlist = (ranlist / ee).astype(int)
             p2De[:, 5] = p2De[:, 5] - ranlist
@@ -241,10 +283,8 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
 
                 # start a e-e scattering   stept     ,eemfp, and e-h scattering
                 if p2De[k - 1, 5] > bandgap:
-                    # mfp/2 is average loss? remove later, /5 is match the
-                    # tstep
+                    # mfp/2 is average loss remove later, /5 is match the tstep
                     r = float(mfp / (eemfp(p2De[k - 1, 5] - bandgap) / 10) / 5)
-
                     # ee-eh random.randint(0,1); if ee set to 1
                     sec1 = random.randint(0, 1)
                     # the ratio of e-e and e-h scattering
@@ -264,15 +304,21 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
                                 bandgap, p2De[k - 1, 5]) * happ * selc[0]
                         # e-h scattering
                         p2De[k - 1, 5] = p2De[k - 1, 5] - \
-                            random.uniform(0, 1.27) * happ * selc[1]
+                            random.uniform(0, VB_width) * happ * selc[1]
 
                     else:
                         happ = 1
-                        # *random.uniform(bandgap,p2De[k-1,5])*selc[0]      e-e scattering *int(mfp/(eemfp(p2De[k-1,5]-bandgap)/10))
-                        p2De[k - 1, 5] = p2De[k - 1, 5] - np.minimum(int(r), int(
-                            p2De[k - 1, 5] / bandgap)) * random.uniform(bandgap, p2De[k - 1, 5]) * selc[0]
-                        p2De[k - 1, 5] = p2De[k - 1, 5] - np.minimum(int(r), int(
-                            p2De[k - 1, 5] / bandgap)) * random.uniform(0, 1.27) * selc[1]  # e-h scattering
+                        # *random.uniform(bandgap,p2De[k-1,5])*selc[0]
+                # e-e scattering *int(mfp/(eemfp(p2De[k-1,5]-bandgap)/10))
+                        p2De[k - 1, 5] = p2De[k - 1, 5] -\
+                            np.minimum(int(r),
+                                       int(p2De[k - 1, 5] / bandgap)) * \
+                            random.uniform(
+                            bandgap, p2De[k - 1, 5]) * selc[0]
+                        p2De[k - 1, 5] = p2De[k - 1, 5] - np.minimum(int(r),
+                                                                     int(
+                            p2De[k - 1, 5] / bandgap)) * \
+                            random.uniform(0, VB_width) * selc[1]
                 else:
                     happ = 0
 
@@ -283,18 +329,16 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
                     qp = random.uniform(0, 2 * math.pi)
                     if np.maximum(happ, nor_ranlist[k - 1]) == 1:
                         p2De[k - 1, 2] = p2De[k - 1, 4] * \
-                            math.cos(q) * math.cos(qp) * \
-                            np.maximum(happ, nor_ranlist[k - 1])
+                            math.cos(q) * math.cos(qp)
                         p2De[k - 1, 3] = p2De[k - 1, 4] * \
-                            math.sin(q) * math.cos(qp) * \
-                            np.maximum(happ, nor_ranlist[k - 1])
+                            math.sin(q) * math.cos(qp)
 
             se, st, sb, p2De = swap(bounde, bounda, 0, p2De, ee)
 
             p2D_emission.extend(se.tolist())
             p2D_trap.extend(st.tolist())
             p2D_back.extend(sb.tolist())
-            ##print (t,'   ', len(p2De),'  ',len(se),'   ',len(st),'    ',len(sb))
+            # print (t,' ', len(p2De),' ',len(se),' ',len(st),' ',len(sb))
 
             tempres.append([t, len(se)])
 
@@ -313,21 +357,18 @@ def diff(stept, endT, p2Di, mfp_ps, eloss, bounde, bounda, types):
         p2De[:, 0] = np.clip(p2De[:, 0], bounde, bounda)
 
     else:
-        print(
-            "wrong type: 1 is non scattering; 2 is brown diffusion 3 is consider scattering")
+        print("wrong type: 1 is non scattering; 2 is brown diffusion 3 is \
+            consider scattering")
 
     '''
     p2De[:,0]=map(lambda x:bounde if (x < bounde) else x,p2De[:,0])
     p2De[:,0]=map(lambda x:bounda if (x > bounda) else x,p2De[:,0])
     '''
     p2D_emission = np.array(p2D_emission)
-
     if len(p2D_emission) != 0:
-
         p2D_emission[:, 0] = bounde
 
     p2D_back = np.array(p2D_back)
-
     if len(p2D_back) != 0:
         p2D_back[:, 0] = bounda
 
@@ -343,13 +384,13 @@ def swap(be, ba, bb, mat, el):
     emissind = mat[:, 0] <= be
     backind = mat[:, 0] >= ba
     loweind = mat[:, 5] <= bb
-
+    print(mat[:, 0])
     swape = mat[emissind, :]
     swape[:, 5] = swape[:, 5] + el
     swapt = mat[(~emissind) & (~backind) & loweind, :]
     swapb = mat[backind, :]
     swapr = mat[(~emissind) & (~loweind) & (~backind), :]
-    # print swapt.shape
+    # print(swape)
     return swape, swapt, swapb, swapr
 
 
@@ -371,17 +412,24 @@ def emission(mat, ea, sctk):
     '''
     gamma=(np.mean(emission[:,5])+511000.0)/511000.0
     beta=np.sqrt(1-gamma**-2)
-    Temittance= gamma*beta*np.sqrt(np.mean(emission[:,1]**2)*(10**-9)*np.mean((emission[:,3]/emission[:,2])**2)-np.mean(emission[:,1]*(10**-9)*(emission[:,3]/emission[:,2]))**2)  #sqrt(<x**2><x'**2>-<xx'>**2)
+    Temittance= gamma*beta*np.sqrt(np.mean(emission[:,1]**2)*(10**-9)*
+    np.mean((emission[:,3]/emission[:,2])**2)-np.mean(emission[:,1]*(10**-9)*
+    (emission[:,3]/emission[:,2]))**2)  #sqrt(<x**2><x'**2>-<xx'>**2)
     '''
-    Temittance = np.sqrt(np.mean((emission[:, 1] * 10**-9)**2)) * (np.sqrt(np.mean(
-        ((emission[:, 3] * 10**-9) / np.cos(emission[:, 6]))**2))) * np.sqrt(eff) / (3 * 10**8)  # sigma_x*sqrt(<v_x**2>)/c
-    # print np.mean(emission[:,1]**2),np.mean(emission[:,1]**2),'\n',np.mean((emission[:,3]/emission[:,2])**2),'\n',np.mean(emission[:,1]*(emission[:,3]/emission[:,2]))**2
+    Temittance = np.sqrt(np.mean((emission[:, 1] * 10**-9)**2)) * \
+        (np.sqrt(np.mean(((emission[:, 3] * 10**-9) /
+                          np.cos(emission[:, 6]))**2))) * np.sqrt(eff) / \
+        (3 * 10**8)  # sigma_x*sqrt(<v_x**2>)/c
+# print np.mean(emission[:,1]**2),np.mean(emission[:,1]**2),'\n',
+# np.mean((emission[:,3]/emission[:,2])**2),'\n',
+# np.mean(emission[:,1]*(emission[:,3]/emission[:,2]))**2
     # print
     # np.sqrt(np.mean((emission[:,1]*10**-9)**2)),np.sqrt(np.mean(emission[:,3]**2))/(3*10**8)
     return emission, Temittance, surface_trap
 
 
-def plot(p2D, pens, p2De, para, params_exp, thickness, tempres, petest, electron_affinity, finame):
+def plot(p2D, pens, p2De, para, params_exp, thickness, tempres, petest,
+         electron_affinity, finame):
     # print tempres
     plt.subplot(511)
     plt.xlabel('thickness[nm]')
@@ -397,7 +445,7 @@ def plot(p2D, pens, p2De, para, params_exp, thickness, tempres, petest, electron
     plt.xlabel('thickness[nm]')
     plt.ylabel('P')
     plt.xlim(0, 2 * thickness)
-    # plt.plot(z, expon.pdf(z, *params_exp),'r',z,expon.cdf(z, *params_exp), 'g')
+# plt.plot(z, expon.pdf(z, *params_exp),'r',z,expon.cdf(z, *params_exp), 'g')
     plt.plot(z, expon.pdf(z, *params_exp), 'r')
 
     plt.subplot(513)
@@ -433,8 +481,10 @@ def plot(p2D, pens, p2De, para, params_exp, thickness, tempres, petest, electron
     return
 
 
-def emittancescanplot(wlscan, start, stop, ea, thickness, mfp, expdata, finame):
-    with open(finame + 'emittance_ea_wl_scan_mfp_%.3ftk_%dbg_%.3feff_%.4f.csv' % (mfp, thickness, bandgap, eff), 'ab') as csv:
+def emittancescanplot(wlscan, start, stop, ea, thickness, mfp, expdata,
+                      finame):
+    with open(finame + 'emittance_ea_wl_scan_mfp_%.3ftk_%dbg_%.3feff_%.4f.csv'
+              % (mfp, thickness, bandgap, eff), 'ab') as csv:
         np.savetxt(csv, wlscan, fmt='%.8e', delimiter=',')
     fig, ax1 = plt.subplots(figsize=(16, 8))
     ax2 = ax1.twinx()
@@ -458,8 +508,10 @@ def emittancescanplot(wlscan, start, stop, ea, thickness, mfp, expdata, finame):
                 (ea, mfp, thickness, bandgap, eff))
 
 
-def electronlossscanplot(wlscan, start, stop, pestep, mfp, electron_affinity, thickness, ee, eh, expdata, finame):
-    with open(finame + 'ea_wl_scan_mfp_%.3fee_%deh_%d.csv' % (mfp, ee, eh), 'ab') as csv:
+def electronlossscanplot(wlscan, start, stop, pestep, mfp, electron_affinity,
+                         thickness, ee, eh, expdata, finame):
+    with open(finame + 'ea_wl_scan_mfp_%.3fee_%deh_%d.csv' %
+              (mfp, ee, eh), 'ab') as csv:
         np.savetxt(csv, wlscan, fmt='%.8e', delimiter=',')
 
     fig, ax1 = plt.subplots(figsize=(16, 8))
@@ -474,10 +526,13 @@ def electronlossscanplot(wlscan, start, stop, pestep, mfp, electron_affinity, th
 
     # print
     # bandgap1,electron_affinity,(2.3-(start))/pestep,wlscan[ind_annot,0],wlscan[0,0]
-    ax1.annotate('(%s,%s)' % (wlscan[ind_annot + 1, 0], wlscan[ind_annot + 1, 2]), xy=(
-        wlscan[ind_annot + 1, 0], wlscan[ind_annot + 1, 2]), textcoords='offset points')
+    ax1.annotate('(%s,%s)' % (wlscan[ind_annot + 1, 0],
+                              wlscan[ind_annot + 1, 2]),
+                 xy=(wlscan[ind_annot + 1, 0],
+                     wlscan[ind_annot + 1, 2]),
+                 textcoords='offset points')
 
-    legend = ax1.legend(loc='best')
+    ax1.legend(loc='best')
     ax1.set_xlabel('photon energy[eV]')
     # plt.xlim(1.6,6.5)
     ticks = np.arange(start - 0.2, stop + 0.2, 0.2)
@@ -492,18 +547,18 @@ def electronlossscanplot(wlscan, start, stop, pestep, mfp, electron_affinity, th
 
 def main(op):
 
-    # DOS16: bandgap:1.64eV,  DOS12: bandgap:1.23eV
-    dosdata = genfromtxt('K2CsSb DOS160.csv', delimiter=',')
+    # DOS: bandgap:1.42 eV
+    dosdata = genfromtxt('GaAs_DOS.csv', delimiter=',')
     # print(dosdata)
     expdata = genfromtxt('cooling_exp.csv', delimiter=',')
-    electron_affinity = 0.08  # 0.4
-    thickness = 50
-    n = 100000
+    thickness = 500
+    global electron_affinity
+    n = 1000000  # number of incident photon
     # pestart=1.4
-    peend = 4.7
-    pestep = 0.3
-    petest = 2.3
-    bandgap1 = float('%.1f' % bandgap)
+    peend = 3.1
+    pestep = 0.05
+    petest = 1.3
+    bandgap1 = float('%.2f' % bandgap)
     schottky = 0
     tstep = 0.00001
     tend = 0.01
@@ -645,11 +700,9 @@ def main(op):
             trapsur = surtrapt * 100 / float(n)
 
             '''
-                print ep,'  ',len(emisst)+(float(n)-len(ppd))+len(ba)+len(tr)+surtrapt
-                
-                
-                qe=len(emisst)*100/float(len(ppd)) 
-                labs=0         
+         print ep,'  ',len(emisst)+(float(n)-len(ppd))+len(ba)+len(tr)+surtrapt
+                qe=len(emisst)*100/float(len(ppd))
+                labs=0
                 backd=len(ba)*100/float(len(ppd))
                 trapin=len(tr)*100/float(len(ppd))
                 trapsur=surtrapt*100/float(len(ppd))
@@ -661,20 +714,28 @@ def main(op):
         wlscan = np.array(wlscan)
         stop = peend
         electronlossscanplot(wlscan, start, stop, pestep, mfp,
-                             electron_affinity, thickness, ee, eh, expdata, finame)
+                             electron_affinity, thickness, ee,
+                             eh, expdata, finame)
         # plt.show()
         # print wlscan
 
     elif op == 4:   # emittance vs qe with Dos, wavelength scan wt single ea
 
         wlscan = []
-        start = bandgap1 + electron_affinity + 0.1
+        start = bandgap1 + electron_affinity
 
         for ep in np.arange(start, peend, pestep):
-            emisst, emittancet, surtrapt = emission(diff(tstep, tend, DosDist(n, ep, thickness, dosdata)[
-                                                    1], mfp, eloss, emisposition, thickness, 3)[0], electron_affinity, schottky)
+            emisst, emittancet, surtrapt = emission(diff(tstep, tend,
+                                                         DosDist(n, ep,
+                                                                 thickness,
+                                                                 dosdata)[1],
+                                                         mfp, eloss,
+                                                         emisposition,
+                                                         thickness, 3)[0],
+                                                    electron_affinity,
+                                                    schottky)
             qe = len(emisst) * 100 / float(n)
-            print(ep, '    ', emittancet, '   ', qe, '%')
+            print(ep, '  ', emittancet, '  ', qe, '%')
             wlscan.append([ep, emittancet, qe])
 
         wlscan = np.array(wlscan)
@@ -691,13 +752,15 @@ def main(op):
         # diff(stept,endT,p2Di,mfp_ps,bounde,bounda,types):
         esurf, trap, back, p2De, tempres = diff(
             tstep, tend, p2D, mfp, eloss, emisposition, thickness, 3)
-        # time step, time end, inital beam, mfp, emission surface, thickness, calculation type
+        # time step, time end, inital beam, mfp, emission surface,
+        # thickness, calculation type
         # esurf: reach to surface, trap: trap in body, back: get to back, p2De:
         # all the particulates information
         # beam reach to surface, electron affinity, schottky
         emiss, emittance, surtrap = emission(
             esurf, electron_affinity, schottky)
-        # emiss: emit out beam, emittance:rms nor thermal emittance, surtrap: trap at surface
+        # emiss: emit out beam, emittance:rms nor thermal emittance
+        # surtrap: trap at surface
         # print emittance, float(len(emiss)/n)
         # print emiss
 
@@ -708,6 +771,6 @@ def main(op):
 
     print("----%s sceonds----" % (time.time() - start_time))
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     main(4)
